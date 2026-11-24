@@ -3,22 +3,43 @@
   "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
   "configurePresets": [
     {
+      "name": "windows-mingw",
+      "displayName": "Windows x64 MinGW + Qt 6.8.3",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/mingw",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "D:/Qt/Tools/mingw1310_64/bin/g++.exe",
+        "CMAKE_PREFIX_PATH": "D:/Qt/6.8.3/mingw_64",
+        "CMAKE_MAKE_PROGRAM": "C:/ST/STM32CubeCLT_1.22.0/Ninja/bin/ninja.exe",
+        "MIXVERA_BUILD_UI": "ON",
+        "MIXVERA_BUILD_TESTS": "ON",
+        "MIXVERA_ENABLE_LIBOBS": "OFF"
+      }
+    },
+    {
       "name": "windows-stub",
-      "displayName": "Windows x64 Stub Engine",
+      "displayName": "Windows x64 headless stub engine",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/stub",
-      "architecture": { "value": "x64", "strategy": "external" },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_PREFIX_PATH": "C:/Qt/6.12.1/msvc2022_64",
+        "CMAKE_MAKE_PROGRAM": "C:/ST/STM32CubeCLT_1.22.0/Ninja/bin/ninja.exe",
+        "MIXVERA_BUILD_UI": "OFF",
         "MIXVERA_ENABLE_LIBOBS": "OFF"
       }
     }
   ],
   "buildPresets": [
+    { "name": "windows-mingw", "configurePreset": "windows-mingw" },
     { "name": "windows-stub", "configurePreset": "windows-stub" }
   ],
   "testPresets": [
+    {
+      "name": "windows-mingw",
+      "configurePreset": "windows-mingw",
+      "output": { "outputOnFailure": true }
+    },
     {
       "name": "windows-stub",
       "configurePreset": "windows-stub",

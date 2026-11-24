@@ -12,6 +12,7 @@ src/mixvera/control 远程控制协议骨架
 src/mixvera/engine  媒体引擎接口与 Stub 后端
 src/mixvera/ui      Qt Widgets 前端
 tests/core          核心服务单元测试
+tests/ui            Qt 界面交互冒烟测试
 third_party         第三方单头文件依赖
 ```
 

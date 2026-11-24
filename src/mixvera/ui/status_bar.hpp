@@ -10,7 +10,10 @@ class StatusBar final : public QStatusBar {
 
 public:
     explicit StatusBar(QWidget* parent = nullptr);
+    ~StatusBar() override;
+
     void setTransition(float position);
+    void setOutputsActive(int active, int total);
 
 private:
     class impl_t;

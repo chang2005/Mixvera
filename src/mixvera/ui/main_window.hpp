@@ -3,10 +3,7 @@
 #include <QMainWindow>
 #include <memory>
 
-class QLabel;
-class QPushButton;
-class QSlider;
-class QStatusBar;
+class QString;
 
 namespace mixvera::ui {
 
@@ -18,15 +15,20 @@ public:
     ~MainWindow() override;
 
 private slots:
-    void onTake();
+    void onCut();
+    void onAuto();
+    void onAutoTick();
     void onTBarChanged(int value);
-    void onReplaySave();
+    void onTBarReleased();
+    void onPreviewSelected(const QString& inputId);
+    void refresh();
 
 private:
-    void buildMenuBar();
-    void buildCentralWidget();
-    void buildDocks();
-    void refreshStatus();
+    QWidget* buildHeader();
+    QWidget* buildMonitors();
+    QWidget* buildTransitionCard();
+    QWidget* buildSidebar();
+    void updateTransition(float position);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

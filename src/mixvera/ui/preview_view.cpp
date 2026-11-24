@@ -3,11 +3,10 @@
 namespace mixvera::ui {
 
 PreviewView::PreviewView(QWidget* parent)
-    : QLabel("PREVIEW\n\nlibobs preview surface", parent)
+    : VideoSurface(parent)
 {
     setObjectName("previewView");
-    setAlignment(Qt::AlignCenter);
-    setStyleSheet("background:#171a1f;color:#2ecc71;font:bold 18px;");
+    setRole(Role::Preview);
 }
 
 } // namespace mixvera::ui

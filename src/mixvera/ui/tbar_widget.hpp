@@ -12,6 +12,7 @@ public:
 
 signals:
     void positionChanged(int value);
+    void released();
 };
 
 } // namespace mixvera::ui

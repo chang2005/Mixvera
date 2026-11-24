@@ -56,12 +56,15 @@ if(MIXVERA_BUILD_UI)
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
     add_library(mixvera_ui STATIC
         src/mixvera/ui/main_window.cpp
+        src/mixvera/ui/video_surface.cpp
         src/mixvera/ui/program_view.cpp
         src/mixvera/ui/preview_view.cpp
         src/mixvera/ui/multiview_panel.cpp
         src/mixvera/ui/tbar_widget.cpp
         src/mixvera/ui/mixer_panel.cpp
+        src/mixvera/ui/output_panel.cpp
         src/mixvera/ui/status_bar.cpp
+        src/mixvera/ui/theme.cpp
     )
     target_link_libraries(mixvera_ui PUBLIC mixvera_core Qt6::Core Qt6::Gui Qt6::Widgets)
 

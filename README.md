@@ -1,6 +1,14 @@
 # Mixvera
 
-Mixvera 是一个面向专业导播场景的开源切换台软件基础框架。当前仓库包含 `0.1.0` 基础框架，媒体引擎默认使用 Stub 后端，可在尚未配置 libobs 的环境直接构建与运行。
+Mixvera 是一个面向专业导播场景的开源切换台软件。当前仓库为 `0.1.0` 基础框架与第一版可运行 Demo，媒体引擎默认使用 Stub 后端，可在尚未配置 libobs 的环境直接构建与运行。
+
+![Mixvera demo](docs/demo/mixvera-demo.png)
+
+## 第一版 Demo
+
+已实现 PGM/PVW 双监视器、MultiView 点击预览、CUT/AUTO/T-Bar 转场、音频推子与 6 路总线路由、三路输出启停、Replay 控制和快捷键操作。详细说明与操作方式见 [docs/DEMO.md](docs/DEMO.md)。
+
+当前画面为程序生成的模拟信号，真实 SDI/NDI 输入与 RTMP/NDI/录制输出将在 libobs 适配层接入。
 
 ## 技术路线
 
@@ -17,26 +25,28 @@ Mixvera 是一个面向专业导播场景的开源切换台软件基础框架。
 
 ## Windows 构建
 
-在 “x64 Native Tools Command Prompt for VS 2022” 中执行：
+已验证环境：Qt 6.8.3 MinGW、MinGW 13.1、CMake 4.x、Ninja。
 
 ```powershell
-cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH="C:/Qt/6.12.1/msvc2022_64" -DMIXVERA_ENABLE_LIBOBS=OFF
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --preset windows-mingw
+cmake --build --preset windows-mingw
+ctest --test-dir build/mingw --output-on-failure
 ```
 
 启动：
 
 ```powershell
-.\build\Mixvera.exe
+.\build\mingw\Mixvera.exe
 ```
+
+`windows-mingw` 预设中的 Qt、MinGW 与 Ninja 路径位于 `CMakePresets.json`，可按本机安装位置调整。
 
 ## libobs 模式
 
 准备好 libobs 的 CMake package 后：
 
 ```powershell
-cmake -S . -B build-libobs -G Ninja -DCMAKE_PREFIX_PATH="C:/Qt/6.12.1/msvc2022_64;C:/path/to/obs/build" -DMIXVERA_ENABLE_LIBOBS=ON
+cmake -S . -B build-libobs -G Ninja -DCMAKE_PREFIX_PATH="D:/Qt/6.8.3/mingw_64;C:/path/to/obs/build" -DMIXVERA_ENABLE_LIBOBS=ON
 cmake --build build-libobs
 ```
 
