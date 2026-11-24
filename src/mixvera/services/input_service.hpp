@@ -17,8 +17,17 @@ public:
     std::size_t count() const { return inputs_.size(); }
 
     void add(core::InputDescriptor descriptor);
+    void clear();
+    void load(const std::vector<core::InputDescriptor>& inputs);
+    bool update(const core::InputDescriptor& descriptor);
     bool rename(const std::string& id, const std::string& name);
     bool remove(const std::string& id);
+
+    /// True when `id` is already used by any input.
+    bool contains(const std::string& id) const { return find(id) != nullptr; }
+
+    /// First free id of the form prefix-N.
+    std::string uniqueId(const std::string& prefix) const;
 
 private:
     core::EventBus& bus_;

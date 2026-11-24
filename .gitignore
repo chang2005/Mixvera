@@ -4,3 +4,12 @@ build-*/
 .vscode/
 CMakeUserPresets.json
 *.user
+
+# Large reference installers provided for UI research; never committed.
+/OBS-Studio-*-Installer.exe
+/vmix*.exe
+
+# Generated capture / layout diagnostics.
+/docs/demo/*.log
+/docs/demo/ui-*.txt
+/docs/demo/screen-capture.json

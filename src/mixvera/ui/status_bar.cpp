@@ -4,37 +4,56 @@
 
 namespace mixvera::ui {
 
-class StatusBar::impl_t {
-public:
-    QLabel* engine = nullptr;
-    QLabel* outputs = nullptr;
-    QLabel* transition = nullptr;
-};
-
 StatusBar::StatusBar(QWidget* parent)
     : QStatusBar(parent)
-    , impl_(std::make_unique<impl_t>())
 {
-    impl_->engine = new QLabel("●  SERVICES ONLINE  ·  STUB ENGINE", this);
-    impl_->outputs = new QLabel("OUTPUTS 0 / 3", this);
-    impl_->transition = new QLabel("T-BAR 0%", this);
-    addWidget(impl_->engine);
-    addWidget(impl_->outputs);
-    addPermanentWidget(impl_->transition);
-    setSizeGripEnabled(false);
+    engine_ = new QLabel(tr("ENGINE —"), this);
+    canvas_ = new QLabel(tr("CANVAS —"), this);
+    outputs_ = new QLabel(tr("OUTPUTS 0"), this);
+    project_ = new QLabel(tr("PROJECT —"), this);
+    onAir_ = new QLabel(tr("STANDBY"), this);
+    onAir_->setObjectName("statusOnAir");
+    clock_ = new QLabel(this);
+
+    addWidget(engine_);
+    addWidget(new QLabel(QStringLiteral("|"), this));
+    addWidget(canvas_);
+    addWidget(new QLabel(QStringLiteral("|"), this));
+    addWidget(outputs_);
+    addPermanentWidget(project_);
+    addPermanentWidget(onAir_);
+    addPermanentWidget(clock_);
 }
 
-StatusBar::~StatusBar() = default;
-
-void StatusBar::setTransition(float position)
+void StatusBar::setEngineText(const QString& text)
 {
-    impl_->transition->setText(QString("T-BAR %1%").arg(
-        static_cast<int>(position * 100.0F + 0.5F)));
+    engine_->setText(text);
 }
 
-void StatusBar::setOutputsActive(int active, int total)
+void StatusBar::setCanvasText(const QString& text)
 {
-    impl_->outputs->setText(QString("OUTPUTS %1 / %2").arg(active).arg(total));
+    canvas_->setText(text);
+}
+
+void StatusBar::setOutputText(const QString& text)
+{
+    outputs_->setText(text);
+}
+
+void StatusBar::setProjectText(const QString& text)
+{
+    project_->setText(text);
+}
+
+void StatusBar::setOnAir(bool live)
+{
+    onAir_->setText(live ? tr("ON AIR") : tr("STANDBY"));
+    onAir_->setStyleSheet(live ? "color:#E85E75;font-weight:700;" : "color:#969696;");
+}
+
+void StatusBar::setClock(const QString& text)
+{
+    clock_->setText(text);
 }
 
 } // namespace mixvera::ui

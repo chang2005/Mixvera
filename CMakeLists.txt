@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(Mixvera
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "Mixvera professional live production switcher"
     LANGUAGES CXX)
 
@@ -23,6 +23,7 @@ add_library(mixvera_core STATIC
     src/mixvera/core/json_document.cpp
     src/mixvera/core/application.cpp
     src/mixvera/core/domain_types.cpp
+    src/mixvera/core/project.cpp
     src/mixvera/services/switcher_service.cpp
     src/mixvera/services/input_service.cpp
     src/mixvera/services/transition_service.cpp
@@ -53,20 +54,29 @@ else()
 endif()
 
 if(MIXVERA_BUILD_UI)
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
     add_library(mixvera_ui STATIC
         src/mixvera/ui/main_window.cpp
-        src/mixvera/ui/video_surface.cpp
-        src/mixvera/ui/program_view.cpp
-        src/mixvera/ui/preview_view.cpp
-        src/mixvera/ui/multiview_panel.cpp
-        src/mixvera/ui/tbar_widget.cpp
+        src/mixvera/ui/stage_view.cpp
+        src/mixvera/ui/transition_bar.cpp
+        src/mixvera/ui/scene_panel.cpp
+        src/mixvera/ui/input_panel.cpp
         src/mixvera/ui/mixer_panel.cpp
-        src/mixvera/ui/output_panel.cpp
         src/mixvera/ui/status_bar.cpp
         src/mixvera/ui/theme.cpp
+        src/mixvera/ui/add_input_dialog.cpp
+        src/mixvera/ui/settings_dialog.cpp
+        src/mixvera/ui/media/source_providers.cpp
+        src/mixvera/ui/media/compositor.cpp
+        src/mixvera/ui/media/recorder.cpp
+        src/mixvera/ui/media/audio_meter.cpp
+        src/mixvera/ui/platform/win_capture.cpp
     )
-    target_link_libraries(mixvera_ui PUBLIC mixvera_core Qt6::Core Qt6::Gui Qt6::Widgets)
+    target_link_libraries(mixvera_ui PUBLIC
+        mixvera_core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia)
+    if(WIN32)
+        target_link_libraries(mixvera_ui PRIVATE user32)
+    endif()
 
     add_executable(Mixvera apps/mixvera/main.cpp)
     target_link_libraries(Mixvera PRIVATE mixvera_ui mixvera_engine Qt6::Widgets)

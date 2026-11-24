@@ -16,6 +16,12 @@ core::AudioChannelState* AudioService::find(const std::string& inputId)
     return it == channels_.end() ? nullptr : &*it;
 }
 
+void AudioService::clear()
+{
+    channels_.clear();
+    bus_.publish({"audio/channels_cleared", ""});
+}
+
 void AudioService::addChannel(const std::string& inputId)
 {
     if (find(inputId) == nullptr) {

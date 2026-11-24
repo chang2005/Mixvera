@@ -1,7 +1,8 @@
 #pragma once
 
 #include <QStatusBar>
-#include <memory>
+
+class QLabel;
 
 namespace mixvera::ui {
 
@@ -10,14 +11,21 @@ class StatusBar final : public QStatusBar {
 
 public:
     explicit StatusBar(QWidget* parent = nullptr);
-    ~StatusBar() override;
 
-    void setTransition(float position);
-    void setOutputsActive(int active, int total);
+    void setEngineText(const QString& text);
+    void setCanvasText(const QString& text);
+    void setOutputText(const QString& text);
+    void setProjectText(const QString& text);
+    void setOnAir(bool live);
+    void setClock(const QString& text);
 
 private:
-    class impl_t;
-    std::unique_ptr<impl_t> impl_;
+    QLabel* engine_ = nullptr;
+    QLabel* canvas_ = nullptr;
+    QLabel* outputs_ = nullptr;
+    QLabel* project_ = nullptr;
+    QLabel* onAir_ = nullptr;
+    QLabel* clock_ = nullptr;
 };
 
 } // namespace mixvera::ui

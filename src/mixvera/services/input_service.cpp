@@ -26,6 +26,31 @@ void InputService::add(core::InputDescriptor descriptor)
     bus_.publish({"input/added", inputs_.back().id});
 }
 
+void InputService::clear()
+{
+    inputs_.clear();
+    bus_.publish({"input/cleared", ""});
+}
+
+void InputService::load(const std::vector<core::InputDescriptor>& inputs)
+{
+    inputs_ = inputs;
+    bus_.publish({"input/loaded", std::to_string(inputs_.size())});
+}
+
+bool InputService::update(const core::InputDescriptor& descriptor)
+{
+    auto it = std::find_if(inputs_.begin(), inputs_.end(), [&](const auto& input) {
+        return input.id == descriptor.id;
+    });
+    if (it == inputs_.end()) {
+        return false;
+    }
+    *it = descriptor;
+    bus_.publish({"input/updated", descriptor.id});
+    return true;
+}
+
 bool InputService::rename(const std::string& id, const std::string& name)
 {
     auto it = std::find_if(inputs_.begin(), inputs_.end(), [&](const auto& input) {
@@ -51,6 +76,16 @@ bool InputService::remove(const std::string& id)
     }
     bus_.publish({"input/removed", id});
     return true;
+}
+
+std::string InputService::uniqueId(const std::string& prefix) const
+{
+    for (int index = 1;; ++index) {
+        const std::string candidate = prefix + "-" + std::to_string(index);
+        if (!contains(candidate)) {
+            return candidate;
+        }
+    }
 }
 
 } // namespace mixvera::services
