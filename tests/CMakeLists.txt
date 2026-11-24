@@ -1,0 +1,3 @@
+add_executable(mixvera_core_tests core/test_switcher_service.cpp)
+target_link_libraries(mixvera_core_tests PRIVATE mixvera_core)
+add_test(NAME mixvera_core_tests COMMAND mixvera_core_tests)

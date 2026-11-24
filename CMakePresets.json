@@ -1,0 +1,28 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-stub",
+      "displayName": "Windows x64 Stub Engine",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/stub",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.12.1/msvc2022_64",
+        "MIXVERA_ENABLE_LIBOBS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-stub", "configurePreset": "windows-stub" }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-stub",
+      "configurePreset": "windows-stub",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
