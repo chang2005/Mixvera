@@ -103,12 +103,17 @@ Project makeDefaultProject()
     pattern.name = "Camera 1";
     pattern.kind = InputKind::TestPattern;
     pattern.params["pattern"] = "bars";
+    // The welcome inputs stand in for cameras, so they carry audio and give
+    // the mixer real strips instead of an empty dock on first launch.
+    pattern.hasAudio = true;
 
     InputDescriptor colour;
     colour.id = "camera-2";
     colour.name = "Camera 2";
     colour.kind = InputKind::Color;
     colour.params["color"] = "#2743a6";
+    colour.hasAudio = true;
+    colour.volumeDb = -6.0F;
 
     InputDescriptor title;
     title.id = "title-1";

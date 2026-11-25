@@ -1,5 +1,10 @@
 <RCC>
     <qresource prefix="/icons">
         <file>check.svg</file>
+        <file>check-light.svg</file>
+        <file>chevron-down.svg</file>
+        <file>chevron-up.svg</file>
+        <file>chevron-down-light.svg</file>
+        <file>chevron-up-light.svg</file>
     </qresource>
 </RCC>

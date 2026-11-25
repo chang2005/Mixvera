@@ -90,6 +90,9 @@ struct AudioChannelState {
     float pan = 0.0F;
     bool muted = false;
     std::uint32_t mixerMask = 1;
+    /// Monitoring-only state: soloed channels stay audible while the rest of
+    /// the mix is dimmed. Not persisted in the project file.
+    bool solo = false;
 };
 
 struct OutputState {

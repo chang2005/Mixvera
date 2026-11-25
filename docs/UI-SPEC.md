@@ -1,6 +1,6 @@
 # Mixvera 界面参照：OBS 与 vMix 的可验证观察
 
-这份文档记录 `0.3.0` 界面与中文术语的证据来源。原则是**只借鉴公开可观察的界面组织与配色值，不复制任何专有代码、图标或资源**。
+这份文档记录 `0.3.0` 布局与 `0.4.0` 主题、调音台、设置界面的证据来源。原则是**只借鉴公开可观察的界面组织与配色值，不复制任何专有代码、图标或资源**。0.4 的实现约定（token 表、尺寸、交互）另见 [DESIGN.md](DESIGN.md)。
 
 ## 取证环境
 
@@ -22,6 +22,8 @@ vMix 28 启动后会停在 “License Request — vMix software won't run withou
 | 直接从安装包提取的 `Yami.obt`，SHA-256 `fb778672…6a702` | craft-anything `core_text_read` | `ev_0d357aeb…b663d` |
 | vMix 29 安装包为 32 位 PE / Inno Setup，入口 `0x4b5eec` | craft-anything `core_target_triage` | `ev_8792cf0a…d32045` |
 | 已安装 vMix 28 为 PE32 / .NET Framework 4.0 / IL-only，程序集 `28.0.0.42` | REA `inspect_managed_artifact` | `ev_6829731f…c910d`（父证据 `ev_72461980…f6e9e`） |
+
+完整的原工程结构复原（OBS 的 CMake / Qt / libobs / 插件树，vMix 的 VB.NET 模块、窗体与资源清单）见 [RE-PROJECTS.md](RE-PROJECTS.md)。
 
 安装包 SHA-256：
 
@@ -124,6 +126,40 @@ vMix 28 启动后会停在 “License Request — vMix software won't run withou
 
 **0.3 采用**：Preview 左、Program 右，中央 156 px 竖向转场列；底部横向输入条 + 页脚；场景/来源与调音台改为可收起的侧栏；顶栏保留品牌、工程名、面板开关、设置、全屏、REC/STREAM。上面的采样值写入 `theme.cpp` 与 `stage_view.cpp`，没有使用 vMix 的图标或布局坐标。
 
+## 0.4：主题、调音台与设置
+
+0.4 不新增截图证据，而是把已有证据落到可切换的主题与设置结构上。
+
+### 主题
+
+| 主题 | 证据 | 采用方式 |
+| --- | --- | --- |
+| Charcoal | vMix 主窗口采样值 `#1E2328` / `#404B56` / `#FF8C00` / `#006400` | 作为默认主题的窗口、转场面板与信号色 |
+| Yami | OBS `Yami.obt` 的 `--grey8 #13141A`、`--grey7 #1D1F26`、`--grey6 #272A33`、`--blue3 #284CB8`、`--red3 #C01C37`、`--green2 #37D247`、`--yellow2 #E5AF24` | 直接的 token 映射：`window` / `surface` / `raised` / `accent` / `danger` / `success` / `warning` |
+| Daylight | OBS 官方同时提供深色与浅色主题这一事实 | 按同样信息层级设计浅色值（浅底 `#EEF1F5`、深字 `#1B2430`、深橙强调 `#C2410C`）；没有照搬 OBS 浅色主题的 QSS |
+
+三套主题共享同一份 QSS 模板和同一组 47 个 token；预览橙、节目绿、录制红作为**功能信号色**在每套主题里都保留（Daylight 使用同色相略深的变体以满足白底对比度）。
+
+### 调音台
+
+OBS 的主题对象名把混音器拆成 `vMixerScrollArea`（可滚动通道区）、`hVolumeWidgets` / `vVolumeWidgets`（横/竖布局）、`volMeterFrame`（电平框），vMix 的调音台则是竖向条。Mixvera 取两者的交集：
+
+- 竖条、可横向滚动 —— vMix 形态
+- 条内自上而下为编号、名称、dB 数值、推子、`M`/`S`，主通道单独一条带刻度电平 —— OBS 通道条的信息顺序
+- 主表分段取 OBS `--green2` / `--yellow2` / `--red3` 的语义：正常绿、预警黄、削波红
+
+没有照搬 OBS 的混音器布局坐标或控件尺寸。
+
+### 设置
+
+vMix 语言包的条目分布显示主窗体只有 38 条、设置窗体 262 条，即「主界面少量高频按钮、配置集中在设置」。OBS 的设置分类（常规 / 视频 / 音频 / 输出 / 快捷键 / 关于）被直接采用为左侧导航的六页；主题卡片与即时预览对应 OBS 外观设置里选择主题即可看到效果的交互。
+
+### 未采用
+
+- 不复制 `Yami.obt` 的 QSS 规则或变量命名，只取颜色值
+- 不复制 OBS 的设置项全文（输出模式、编码器矩阵等），只取分类结构
+- 不复制 vMix 的调音台按钮排布与图标
+
 ## 中文术语
 
 vMix 的 `languages/zh.txt` 存在明显的机器翻译痕迹，例如 `Cut → 切`、`Fade → 褪色`、`Wipe → 擦拭`、`Record → 记录`、`Stream → 流`。这些词在中文导播语境里不自然，也不利于现场操作。
@@ -160,6 +196,8 @@ Mixvera 的取舍：
 | 可收起场景 / 来源栏 | OBS | `src/mixvera/ui/scene_panel.cpp` |
 | 源显隐勾选、上移/下移 | OBS | 同上（`sourceList`） |
 | 右侧调音台 + 电平表 | OBS + vMix | `src/mixvera/ui/mixer_panel.cpp` |
+| 三套主题与 token 化的 QSS | OBS + vMix | `src/mixvera/ui/theme.cpp`、`theme_stylesheet.hpp` |
+| 设置左侧分类导航与主题即时预览 | OBS | `src/mixvera/ui/settings_dialog.cpp` |
 | 录制 / 推流状态胶囊 | OBS + vMix | `main_window.cpp` 顶栏 `pillRec` / `pillStream` |
 | 中文术语 | OBS zh-CN | `translations/mixvera_zh_CN.ts` |
 | 语言加载与回退 | Qt i18n | `apps/mixvera/main.cpp`、`settings_dialog.cpp` |

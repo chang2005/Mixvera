@@ -25,7 +25,7 @@ void AudioService::clear()
 void AudioService::addChannel(const std::string& inputId)
 {
     if (find(inputId) == nullptr) {
-        channels_.push_back({inputId, 0.0F, 0.0F, false, 1});
+        channels_.push_back({inputId, 0.0F, 0.0F, false, 1, false});
         bus_.publish({"audio/channel_added", inputId});
     }
 }
@@ -49,6 +49,17 @@ bool AudioService::setMuted(const std::string& inputId, bool muted)
     }
     channel->muted = muted;
     bus_.publish({"audio/mute_changed", inputId + ":" + (muted ? "1" : "0")});
+    return true;
+}
+
+bool AudioService::setSolo(const std::string& inputId, bool solo)
+{
+    auto* channel = find(inputId);
+    if (!channel) {
+        return false;
+    }
+    channel->solo = solo;
+    bus_.publish({"audio/solo_changed", inputId + ":" + (solo ? "1" : "0")});
     return true;
 }
 

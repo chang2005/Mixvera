@@ -1,8 +1,40 @@
 # Mixvera
 
-Mixvera 是一个面向现场导播场景的开源切换台。`0.3.0` 在 0.2 的真实采集、场景合成、切换与录制能力之上，加入**完整简体中文界面**，并把工作区重排为 **vMix 式布局**：左侧预览、中央竖向转场控制、右侧节目、底部横向输入条。
+Mixvera 是一个面向现场导播场景的开源切换台。`0.4.0` 在 0.3 的中文界面与 vMix 式工作区之上，完成**主题、调音台与设置界面**的设计：三套可实时预览的主题、OBS 式通道条调音台、按 OBS 分类组织的设置对话框。
 
-![Mixvera 0.3 中文界面](docs/demo/mixvera-0.3-zh.png)
+![Mixvera 0.4 中文炭灰主题](docs/demo/mixvera-0.4-zh-charcoal.png)
+
+Yami（OBS 蓝灰）与 Daylight（浅色）主题：
+
+![Mixvera 0.4 Yami 主题](docs/demo/mixvera-0.4-en-yami.png)
+
+![Mixvera 0.4 Daylight 主题](docs/demo/mixvera-0.4-zh-daylight.png)
+
+## 0.4 新增
+
+### 三套主题
+
+- **Charcoal**（默认）：vMix 式炭灰表面 + 橙色控制强调，预览橙 / 节目绿保持信号色
+- **Yami**：取自 OBS `Yami.obt` 的蓝灰三级表面（`#13141A` / `#1D1F26` / `#272A33`）与蓝色强调 `#284CB8`
+- **Daylight**：浅色高对比界面，适合明亮导播间；监视器仍为近黑底，画面不受主题影响
+- 47 个颜色/图标 token 驱动一份 QSS 模板与全部自绘控件，界面里没有散落的颜色字面量
+- 设置里选中主题**即时预览**，取消会恢复原主题；`--theme charcoal|yami|daylight` 或 `MIXVERA_THEME` 可指定
+
+### 调音台
+
+- OBS 式通道条：编号、名称、增益 dB、竖向推子（-60…+12 dB）、`M` / `S`
+- 双电平平段的主输出表（绿/黄/红）带刻度、峰值保持与 dB 读数
+- 推子双击复位 0 dB；静音与增益随工程保存，独奏为监听状态
+- 电平由系统默认录音设备真实驱动；没有设备时显示 `NO AUDIO INPUT`
+
+### 设置界面
+
+- 左侧分类导航 + 右侧分页：常规、视频、音频、输出、快捷键、关于
+- 主题卡片带实时缩略图；「跟随系统语言」与「启动时恢复上次会话」是真实生效的设置
+- 视频页设置画布预设/分辨率/帧率，输出页管理录制目录、ffmpeg 与 RTMP
+- 统一样式的主/次按钮、下拉与微调箭头图标，三套主题下都清晰
+
+设置界面截图：[常规（中文）](docs/demo/mixvera-0.4-settings-general-zh.png)、[音频（英文）](docs/demo/mixvera-0.4-settings-audio-en.png)、[视频（中文）](docs/demo/mixvera-0.4-settings-video-zh.png)。
 
 ## 0.3 新增
 
@@ -62,8 +94,9 @@ Mixvera 是一个面向现场导播场景的开源切换台。`0.3.0` 在 0.2 �
 
 ### 音频
 
-- 右侧可收起的调音台：每个带音频的输入一条通道，推子（-60…+12 dB）、静音
-- 主输出电平表由系统默认录音设备实时驱动（不是动画）
+- 右侧可收起的调音台：每个带音频的输入一条通道，推子（-60…+12 dB）、静音、独奏
+- 增益与静音随工程保存；独奏只影响监听状态
+- 主输出电平表由系统默认录音设备实时驱动（不是动画），带刻度与峰值保持
 - 没有输入设备时明确显示「无音频输入」
 
 ### 输出
@@ -87,13 +120,14 @@ Mixvera 是一个面向现场导播场景的开源切换台。`0.3.0` 在 0.2 �
 
 ## 界面来源
 
-界面不是凭印象画的，颜色、控件命名与信息组织取自 OBS Studio 33.0.3 安装包（本机安装为 32.1.2）与 vMix 28 的可读产物：
+界面不是凭印象画的，颜色、控件命名与信息组织取自 OBS Studio 33.0.3 安装包（本机安装为 32.1.2）与 vMix 28 的可读产物。0.4 的 Yami 主题、调音台通道条与设置分类直接对应这些证据：
 
 - **vMix 主窗口**：官方帮助页的主界面截图（`build/analysis/vmix/NewItem446.png`，本机分析目录，未入库）用于确定预览左 / 节目右的布局、中央竖向转场列、底部横向输入条与功能栏；从截图采样得到背景 `#1E2328`、转场面板 `#404B56`、预览橙 `#FF8C00`、节目绿 `#006400`、页脚 `#293038`、状态栏 `#0A0F14`
 - **vMix 语言包**：`languages/en.txt` 的 `frmmain.*` 控件清单（Cut / Fade / Wipe / Slide / Zoom / FTB、Add Input、Overlay、Record、Stream、Audio Mixer、Settings）与 `zh.txt` 的中文条目，用于确认功能集合和中文术语取舍
-- **OBS**：`Yami.obt` 提供深色三级表面与控件对比度参考，`locale/zh-CN.ini` 提供专业中文术语（硬切、淡入淡出、划像、推流、录制等）
+- **OBS**：`Yami.obt` 的三级深色表面与 `--blue3` 强调色成为 0.4 的 Yami 主题；`volMeterFrame`、`vMixerScrollArea` 等对象名与混音器语义对应通道条设计；`locale/zh-CN.ini` 提供专业中文术语（硬切、淡入淡出、划像、推流、录制等）
+- **设置分类**：OBS「常规 / 视频 / 音频 / 输出 / 快捷键 / 关于」的分页方式成为 0.4 设置对话框的信息架构
 
-完整的对照与取舍见 [docs/UI-SPEC.md](docs/UI-SPEC.md)。没有复制任何 OBS 或 vMix 的代码、图标或资源；只借鉴公开可观察的界面组织与配色值。
+完整的对照与取舍见 [docs/UI-SPEC.md](docs/UI-SPEC.md)，主题 token、布局尺寸、调音台与设置的行为约定见 [docs/DESIGN.md](docs/DESIGN.md)。两份程序的原工程结构复原（OBS 的 CMake / Qt / libobs / 插件树，vMix 的 VB.NET 模块与窗体清单）见 [docs/RE-PROJECTS.md](docs/RE-PROJECTS.md)。没有复制任何 OBS 或 vMix 的代码、图标或资源；只借鉴公开可观察的界面组织与配色值。
 
 > vMix 28 已安装但未购买授权，直接启动会停在 “License Request” 对话框，因此无法对运行中的界面截图；布局证据来自官方帮助截图。vMix 29 安装包只做了只读识别，没有运行安装器。
 
@@ -118,11 +152,19 @@ ctest --test-dir build/mingw --output-on-failure
 .\build\mingw\Mixvera.exe
 ```
 
-中文系统会自动显示中文；也可以显式指定语言：
+中文系统会自动显示中文；也可以显式指定语言与主题：
 
 ```powershell
 .\build\mingw\Mixvera.exe --lang zh_CN
-.\build\mingw\Mixvera.exe --lang en
+.\build\mingw\Mixvera.exe --lang en --theme yami
+.\build\mingw\Mixvera.exe --theme daylight --show-mixer
+```
+
+界面截图可完全用命令行复现（参数表见 [docs/DESIGN.md](docs/DESIGN.md#截图与验收命令行)）：
+
+```powershell
+.\build\mingw\Mixvera.exe --no-restore --lang zh_CN --theme charcoal --show-mixer --screenshot docs\demo\shot.png --screenshot-delay 2800
+.\build\mingw\Mixvera.exe --no-restore --lang zh_CN --settings-screenshot docs\demo\settings.png --settings-page 0
 ```
 
 打包成可脱离 Qt 环境运行：
@@ -158,7 +200,7 @@ cmake --build build\mingw
 | --- | --- |
 | `mixvera_core_tests` | 切换与 T-Bar 释放逻辑 |
 | `mixvera_project_tests` | 工程 JSON 往返、默认工程合法性、图层几何 |
-| `mixvera_ui_smoke_tests` | 真实界面：默认工程、CUT/AUTO/T-Bar、监视器出帧、场景选择不递归、界面录制落盘 |
+| `mixvera_ui_smoke_tests` | 真实界面：默认工程、CUT/AUTO/T-Bar、监视器出帧、场景选择不递归、界面录制落盘、三套主题样式表完整且应用到主窗口 |
 | `mixvera_media_tests` | 屏幕采集出帧、窗口枚举、采集画面合成非黑、ffmpeg 录制文件可生成 |
 
 ## 当前边界

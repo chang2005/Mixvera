@@ -16,6 +16,7 @@ public:
     void clear();
     bool setGain(const std::string& inputId, float gainDb);
     bool setMuted(const std::string& inputId, bool muted);
+    bool setSolo(const std::string& inputId, bool solo);
     bool setMixerMask(const std::string& inputId, std::uint32_t mask);
 
 private:

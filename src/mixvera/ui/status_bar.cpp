@@ -1,6 +1,7 @@
 #include "mixvera/ui/status_bar.hpp"
 
 #include <QLabel>
+#include <QStyle>
 
 namespace mixvera::ui {
 
@@ -48,7 +49,11 @@ void StatusBar::setProjectText(const QString& text)
 void StatusBar::setOnAir(bool live)
 {
     onAir_->setText(live ? tr("ON AIR") : tr("STANDBY"));
-    onAir_->setStyleSheet(live ? "color:#E85E75;font-weight:700;" : "color:#969696;");
+    if (onAir_->property("live").toBool() != live) {
+        onAir_->setProperty("live", live);
+        onAir_->style()->unpolish(onAir_);
+        onAir_->style()->polish(onAir_);
+    }
 }
 
 void StatusBar::setClock(const QString& text)

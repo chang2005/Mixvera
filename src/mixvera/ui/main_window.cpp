@@ -124,6 +124,7 @@ struct MainWindow::Impl {
 
     QTimer* tickTimer = nullptr;
     QTimer* secondTimer = nullptr;
+    QTimer* persistTimer = nullptr;
 
     QElapsedTimer autoClock;
     QElapsedTimer recordClock;
@@ -144,10 +145,16 @@ MainWindow::MainWindow(bool restoreSession, QWidget* parent)
     : QMainWindow(parent)
     , impl_(std::make_unique<Impl>())
 {
-    setWindowTitle(tr("Mixvera 0.3 — Live Production Switcher"));
+    setWindowTitle(tr("Mixvera 0.4 — Live Production Switcher"));
     resize(1600, 960);
     setMinimumSize(1280, 760);
-    setStyleSheet(theme::applicationStyleSheet());
+
+    // --theme wins for this run; otherwise remember the saved choice.
+    QString themeKey = qApp->property("mixvera/theme").toString();
+    if (themeKey.isEmpty()) {
+        themeKey = QSettings().value("ui/theme").toString();
+    }
+    applyTheme(theme::themeFromKey(themeKey));
 
     auto& app = core::Application::instance();
     impl_->inputService = &app.services().get<services::InputService>();
@@ -183,9 +190,16 @@ MainWindow::MainWindow(bool restoreSession, QWidget* parent)
     connect(impl_->secondTimer, &QTimer::timeout, this, &MainWindow::refreshStatus);
     impl_->secondTimer->start();
 
+    // Fader drags emit many values; writing the project JSON on every step
+    // would stall the UI thread, so coalesce the writes.
+    impl_->persistTimer = new QTimer(this);
+    impl_->persistTimer->setSingleShot(true);
+    impl_->persistTimer->setInterval(300);
+    connect(impl_->persistTimer, &QTimer::timeout, this, &MainWindow::persistProject);
+
     if (impl_->meter->start()) {
         impl_->mixer->setAudioDeviceStatus(
-            tr("MIC · %1").arg(impl_->meter->deviceName()), true);
+            tr("LIVE · %1").arg(impl_->meter->deviceName()), true);
     } else {
         impl_->mixer->setAudioDeviceStatus(tr("NO AUDIO INPUT"), false);
     }
@@ -203,6 +217,11 @@ bool MainWindow::loadProject(const QString& path)
     impl_->projectPath = path;
     applyProject(project);
     return true;
+}
+
+void MainWindow::setMixerVisible(bool visible)
+{
+    impl_->mixerToggle->setChecked(visible);
 }
 
 void MainWindow::buildLayout()
@@ -307,8 +326,8 @@ void MainWindow::buildLayout()
     centerLayout->addLayout(monitors, 1);
 
     impl_->mixer = new MixerPanel(impl_->workspace);
-    impl_->mixer->setMinimumWidth(250);
-    impl_->mixer->setMaximumWidth(330);
+    impl_->mixer->setMinimumWidth(280);
+    impl_->mixer->setMaximumWidth(520);
 
     impl_->workspace->addWidget(impl_->scenes);
     impl_->workspace->addWidget(center);
@@ -393,7 +412,7 @@ void MainWindow::buildLayout()
         if (sizes.size() != 3) {
             sizes = {0, 1200, 280};
         }
-        sizes[2] = std::clamp(impl_->workspace->width() / 6, 260, 320);
+        sizes[2] = std::clamp(impl_->workspace->width() / 4, 320, 440);
         if (!impl_->scenes->isVisible()) {
             sizes[0] = 0;
         }
@@ -477,13 +496,15 @@ void MainWindow::buildMenus()
     auto* help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("&About Mixvera"), this, [this] {
         QMessageBox::about(this, tr("About Mixvera"),
-            tr("<h3>Mixvera 0.3</h3>"
+            tr("<h3>Mixvera 0.4</h3>"
                "<p>Live production switcher: scene based compositing, real capture "
-               "inputs, CUT / AUTO / T-Bar transitions and ffmpeg recording.</p>"
+               "inputs, CUT / AUTO / T-Bar transitions, a channel-strip audio mixer "
+               "and ffmpeg recording.</p>"
                "<p>The workspace follows vMix: preview on the left, program on the "
                "right and a vertical transition cluster between them. The input "
                "bar and footer keep the show controls within one click.</p>"
-               "<p>The interface is available in Simplified Chinese and English.</p>"));
+               "<p>Three themes (Charcoal, Yami, Daylight), an OBS style settings "
+               "window and a Simplified Chinese / English interface.</p>"));
     });
 }
 
@@ -538,6 +559,13 @@ void MainWindow::connectSignals()
     connect(impl_->mixer, &MixerPanel::gainChanged, this,
         [this](const QString& id, float gain) {
             impl_->audio->setGain(id.toStdString(), gain);
+            const auto* input = impl_->inputService->find(id.toStdString());
+            if (input) {
+                auto copy = *input;
+                copy.volumeDb = gain;
+                impl_->inputService->update(copy);
+            }
+            schedulePersist();
         });
     connect(impl_->mixer, &MixerPanel::muteChanged, this,
         [this](const QString& id, bool muted) {
@@ -549,7 +577,11 @@ void MainWindow::connectSignals()
                 impl_->inputService->update(copy);
             }
             impl_->inputsPanel->setInputs(impl_->inputService->inputs());
-            persistProject();
+            schedulePersist();
+        });
+    connect(impl_->mixer, &MixerPanel::soloChanged, this,
+        [this](const QString& id, bool solo) {
+            impl_->audio->setSolo(id.toStdString(), solo);
         });
 
     connect(impl_->recordButton, &QPushButton::toggled, this, &MainWindow::onRecordToggled);
@@ -626,6 +658,8 @@ void MainWindow::applyProject(core::Project project)
     for (const auto& input : impl_->inputService->inputs()) {
         if (input.hasAudio) {
             impl_->audio->addChannel(input.id);
+            impl_->audio->setGain(input.id, input.volumeDb);
+            impl_->audio->setMuted(input.id, input.muted);
         }
     }
 
@@ -674,8 +708,27 @@ void MainWindow::applyProject(core::Project project)
     refreshStatus();
 }
 
+void MainWindow::applyTheme(theme::ThemeId id)
+{
+    theme::setTheme(id);
+    setStyleSheet(theme::styleSheet(id));
+    // StageView and the mixer meters paint with theme::palette() directly, so
+    // a repaint is all they need.
+    update();
+}
+
+void MainWindow::schedulePersist()
+{
+    if (impl_->persistTimer) {
+        impl_->persistTimer->start();
+    }
+}
+
 void MainWindow::persistProject()
 {
+    if (impl_->persistTimer) {
+        impl_->persistTimer->stop();
+    }
     impl_->project.inputs = impl_->inputService->inputs();
     const auto& state = impl_->switcher->state();
     impl_->project.programId = state.programInputId;
@@ -1307,29 +1360,36 @@ void MainWindow::onStreamToggled(bool start)
 void MainWindow::onSettings()
 {
     QSettings settings;
-    // main.cpp resolves CLI / environment / settings / system locale and stores
-    // the winner on the application; show that same choice here.
-    QString language = QCoreApplication::instance()->property("mixvera/language").toString();
-    if (language.isEmpty()) {
-        language = settings.value("ui/language").toString();
-    }
-    if (language.isEmpty()) {
-        language = QLocale::system().language() == QLocale::Chinese ? "zh_CN" : "en";
-    }
+    const QString storedLanguage = settings.value("ui/language").toString();
+    const theme::ThemeId originalTheme = theme::currentTheme();
 
     SettingsDialog dialog(this);
     dialog.setValues(impl_->project.canvasWidth, impl_->project.canvasHeight,
         impl_->project.fps, QString::fromStdString(impl_->project.outputs.recordingDirectory),
         QString::fromStdString(impl_->project.outputs.streamUrl),
         QString::fromStdString(impl_->project.outputs.streamKey));
-    dialog.setLanguage(language);
+    dialog.setLanguage(storedLanguage);
+    dialog.setTheme(originalTheme);
+    connect(&dialog, &SettingsDialog::themePreviewRequested, this,
+        [this](theme::ThemeId id) { applyTheme(id); });
+
     if (dialog.exec() != QDialog::Accepted) {
+        applyTheme(originalTheme);
         return;
     }
 
+    const theme::ThemeId chosenTheme = dialog.theme();
+    settings.setValue("ui/theme", theme::themeKey(chosenTheme));
+    settings.setValue("ui/restoreSession", dialog.restoreSession());
+    applyTheme(chosenTheme);
+
     const QString newLanguage = dialog.language();
-    if (!newLanguage.isEmpty() && newLanguage != language) {
-        settings.setValue("ui/language", newLanguage);
+    if (newLanguage != storedLanguage) {
+        if (newLanguage.isEmpty()) {
+            settings.remove("ui/language");
+        } else {
+            settings.setValue("ui/language", newLanguage);
+        }
         QMessageBox::information(this, tr("Interface Language"),
             tr("The interface language will change the next time Mixvera starts."));
     }

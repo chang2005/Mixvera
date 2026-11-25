@@ -1,6 +1,7 @@
 #include "mixvera/core/application.hpp"
 #include "mixvera/engine/media_engine.hpp"
 #include "mixvera/ui/main_window.hpp"
+#include "mixvera/ui/settings_dialog.hpp"
 
 #include <QApplication>
 #include <QDir>
@@ -69,19 +70,28 @@ int main(int argc, char** argv)
 {
     QApplication qt(argc, argv);
     QCoreApplication::setApplicationName("Mixvera");
-    QCoreApplication::setApplicationVersion("0.3.0");
+    QCoreApplication::setApplicationVersion("0.4.0");
     QCoreApplication::setOrganizationName("Mixvera");
 
     QString screenshotPath;
+    QString settingsScreenshotPath;
+    int settingsPage = -1;
     QString dumpPath;
     QString projectFilePath;
     QString languageOverride;
+    QString themeOverride;
     int screenshotDelayMs = 1500;
-    bool restoreSession = true;
+    bool restoreSession = QSettings().value("ui/restoreSession", true).toBool();
+    bool showMixer = false;
     const QStringList arguments = QCoreApplication::arguments();
     for (int index = 1; index < arguments.size(); ++index) {
         if (arguments[index] == "--screenshot" && index + 1 < arguments.size()) {
             screenshotPath = arguments[++index];
+        } else if (arguments[index] == "--settings-screenshot"
+            && index + 1 < arguments.size()) {
+            settingsScreenshotPath = arguments[++index];
+        } else if (arguments[index] == "--settings-page" && index + 1 < arguments.size()) {
+            settingsPage = arguments[++index].toInt();
         } else if (arguments[index] == "--dump-ui" && index + 1 < arguments.size()) {
             dumpPath = arguments[++index];
         } else if (arguments[index] == "--project" && index + 1 < arguments.size()) {
@@ -90,6 +100,10 @@ int main(int argc, char** argv)
             screenshotDelayMs = arguments[++index].toInt();
         } else if (arguments[index] == "--lang" && index + 1 < arguments.size()) {
             languageOverride = arguments[++index];
+        } else if (arguments[index] == "--theme" && index + 1 < arguments.size()) {
+            themeOverride = arguments[++index];
+        } else if (arguments[index] == "--show-mixer") {
+            showMixer = true;
         } else if (arguments[index] == "--no-restore") {
             restoreSession = false;
         }
@@ -107,6 +121,10 @@ int main(int argc, char** argv)
         language = QLocale::system().language() == QLocale::Chinese ? "zh_CN" : "en";
     }
 
+    if (themeOverride.isEmpty()) {
+        themeOverride = qEnvironmentVariable("MIXVERA_THEME");
+    }
+    qt.setProperty("mixvera/theme", themeOverride);
     qt.setProperty("mixvera/language", language);
 
     auto* translator = new QTranslator(&qt);
@@ -134,7 +152,40 @@ int main(int argc, char** argv)
     if (!projectFilePath.isEmpty() && !window.loadProject(projectFilePath)) {
         std::cerr << "Failed to load project: " << projectFilePath.toStdString() << "\n";
     }
+    if (showMixer) {
+        window.setMixerVisible(true);
+    }
     window.show();
+
+    if (!settingsScreenshotPath.isEmpty()) {
+        auto* dialog = new mixvera::ui::SettingsDialog(&window);
+        dialog->setTheme(mixvera::ui::theme::currentTheme());
+        dialog->setLanguage(language.startsWith("zh", Qt::CaseInsensitive)
+                ? QStringLiteral("zh_CN")
+                : QStringLiteral("en"));
+        if (auto* nav = dialog->findChild<QListWidget*>("settingsNav")) {
+            if (settingsPage >= 0 && settingsPage < nav->count()) {
+                nav->setCurrentRow(settingsPage);
+            }
+        }
+        dialog->show();
+        QTimer::singleShot(screenshotDelayMs, &window,
+            [dialog, settingsScreenshotPath] {
+                const QDir directory = QFileInfo(settingsScreenshotPath).absoluteDir();
+                if (!directory.exists()) {
+                    directory.mkpath(".");
+                }
+                if (!dialog->grab().save(settingsScreenshotPath)) {
+                    std::cerr << "Failed to save settings screenshot: "
+                              << settingsScreenshotPath.toStdString() << "\n";
+                } else {
+                    std::cout << "Settings screenshot saved: "
+                              << settingsScreenshotPath.toStdString() << "\n";
+                }
+                dialog->close();
+                QCoreApplication::quit();
+            });
+    }
 
     if (!screenshotPath.isEmpty() || !dumpPath.isEmpty()) {
         QTimer::singleShot(screenshotDelayMs, &window, [&window, screenshotPath, dumpPath] {

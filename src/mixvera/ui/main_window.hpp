@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mixvera/core/project.hpp"
+#include "mixvera/ui/theme.hpp"
 
 #include <QMainWindow>
 #include <memory>
@@ -30,6 +31,9 @@ public:
     /// Loads a project file into the live session (used by --project).
     bool loadProject(const QString& path);
 
+    /// Shows or hides the audio mixer dock (used by --show-mixer and presets).
+    void setMixerVisible(bool visible);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 
@@ -40,7 +44,10 @@ private:
 
     void applyProject(core::Project project);
     void persistProject();
+    void schedulePersist();
     QString projectPath() const;
+
+    void applyTheme(theme::ThemeId id);
 
     void refreshPanels();
     void refreshStage();

@@ -5,7 +5,9 @@
 #include "mixvera/ui/main_window.hpp"
 #include "mixvera/ui/media/recorder.hpp"
 #include "mixvera/ui/stage_view.hpp"
+#include "mixvera/ui/theme.hpp"
 
+#include <QApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QListWidget>
@@ -26,6 +28,8 @@ private slots:
     void inputListShowsEverySource();
     void selectingASceneDoesNotLoop();
     void recordsThroughTheUi();
+    void themeStylesheetsAreComplete();
+    void themeIsAppliedToMainWindow();
 
 private:
     mixvera::services::SwitcherService& switcher()
@@ -162,6 +166,43 @@ void UiSmokeTest::recordsThroughTheUi()
     const QStringList files = QDir(directory.path()).entryList({"*.mp4"}, QDir::Files);
     QVERIFY2(!files.isEmpty(), "No recording file was written by the UI");
     QVERIFY(QFileInfo(QDir(directory.path()).filePath(files.front())).size() > 1024);
+}
+
+void UiSmokeTest::themeStylesheetsAreComplete()
+{
+    using namespace mixvera::ui::theme;
+    const ThemeId ids[] = {ThemeId::Charcoal, ThemeId::Yami, ThemeId::Daylight};
+    QStringList sheets;
+    for (ThemeId id : ids) {
+        const QString qss = styleSheet(id);
+        QVERIFY(!qss.isEmpty());
+        QVERIFY2(!qss.contains("{{"),
+            qPrintable(QStringLiteral("Unresolved token in %1").arg(themeKey(id))));
+        QVERIFY(qss.contains(palette(id).window));
+        QVERIFY(qss.contains(palette(id).program));
+        sheets << qss;
+    }
+    QVERIFY(sheets.at(0) != sheets.at(1));
+    QVERIFY(sheets.at(1) != sheets.at(2));
+    QCOMPARE(themeFromKey("yami"), ThemeId::Yami);
+    QCOMPARE(themeFromKey("obs"), ThemeId::Yami);
+    QCOMPARE(themeFromKey("light"), ThemeId::Daylight);
+    QCOMPARE(themeKey(ThemeId::Daylight), QStringLiteral("daylight"));
+    QVERIFY(!themeName(ThemeId::Charcoal).isEmpty());
+    QVERIFY(!themeDescription(ThemeId::Daylight).isEmpty());
+}
+
+void UiSmokeTest::themeIsAppliedToMainWindow()
+{
+    qApp->setProperty("mixvera/theme", QStringLiteral("daylight"));
+    {
+        mixvera::ui::MainWindow window(false);
+        QVERIFY(window.styleSheet().contains(mixvera::ui::theme::palette(
+            mixvera::ui::theme::ThemeId::Daylight).window));
+    }
+    qApp->setProperty("mixvera/theme", QString());
+    QCOMPARE(mixvera::ui::theme::currentTheme(), mixvera::ui::theme::ThemeId::Daylight);
+    mixvera::ui::theme::setTheme(mixvera::ui::theme::ThemeId::Charcoal);
 }
 
 QTEST_MAIN(UiSmokeTest)

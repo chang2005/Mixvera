@@ -1,5 +1,7 @@
 #include "mixvera/ui/stage_view.hpp"
 
+#include "mixvera/ui/theme.hpp"
+
 #include <QFont>
 #include <QPainter>
 #include <QTime>
@@ -46,8 +48,9 @@ void StageView::setLive(bool live)
 
 void StageView::paintEvent(QPaintEvent*)
 {
+    const theme::Palette& p = theme::palette();
     QPainter painter(this);
-    painter.fillRect(rect(), QColor("#0B0D12"));
+    painter.fillRect(rect(), QColor(p.monitor));
 
     const QRectF full = rect().adjusted(0, 0, -1, -1);
     constexpr qreal headerHeight = 24.0;
@@ -57,12 +60,12 @@ void StageView::paintEvent(QPaintEvent*)
 
     // vMix uses a solid coloured title strip: orange for preview, green for
     // program. Keeping it outside the video area avoids covering the frame.
-    const QColor accent = role_ == Role::Program ? QColor("#006400") : QColor("#FF8C00");
+    const QColor accent = role_ == Role::Program ? QColor(p.program) : QColor(p.preview);
     painter.fillRect(header, accent);
 
     QFont headerFont(QStringLiteral("Segoe UI"), 9, QFont::DemiBold);
     painter.setFont(headerFont);
-    painter.setPen(QColor("#FFFFFF"));
+    painter.setPen(role_ == Role::Program ? QColor(p.onProgram) : QColor(p.onPreview));
     const QString roleText = role_ == Role::Program ? tr("PROGRAM") : tr("PREVIEW");
     const QString name = sourceName_.isEmpty() ? tr("No input") : sourceName_;
     const QString label = roleText + QStringLiteral("  ·  ") + name;
@@ -72,7 +75,7 @@ void StageView::paintEvent(QPaintEvent*)
             static_cast<int>(textArea.width())));
 
     painter.setFont(QFont(QStringLiteral("Consolas"), 8));
-    painter.setPen(QColor(255, 255, 255, 195));
+    painter.setPen(QColor(p.textSecondary));
     painter.drawText(header.adjusted(0, 0, -8, 0), Qt::AlignRight | Qt::AlignVCenter,
         QTime::currentTime().toString("HH:mm:ss"));
 
@@ -87,11 +90,11 @@ void StageView::paintEvent(QPaintEvent*)
         painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
         painter.drawImage(target, frame_);
     } else {
-        painter.fillRect(bounds, QColor("#13171B"));
+        painter.fillRect(bounds, QColor(p.fieldDeep));
         QFont emptyFont(QStringLiteral("Bahnschrift"), 13, QFont::DemiBold);
         emptyFont.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);
         painter.setFont(emptyFont);
-        painter.setPen(QColor(150, 160, 175, 170));
+        painter.setPen(QColor(p.textDim));
         painter.drawText(bounds, Qt::AlignCenter, tr("NO SIGNAL"));
     }
 
@@ -99,14 +102,14 @@ void StageView::paintEvent(QPaintEvent*)
         const QString mix = QStringLiteral("MIX %1%").arg(
             static_cast<int>(std::lround(transition_ * 100.0F)));
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(40, 76, 184, 220));
+        painter.setBrush(QColor(p.info));
         const QRectF pill(bounds.left() + 10, bounds.bottom() - 28, 82, 19);
         painter.drawRoundedRect(pill, 2, 2);
-        painter.setPen(QColor("#FFFFFF"));
+        painter.setPen(QColor(p.onInfo));
         painter.drawText(pill, Qt::AlignCenter, mix);
     }
 
-    painter.setPen(QPen(live_ ? accent.lighter(115) : accent, 1));
+    painter.setPen(QPen(live_ ? accent.lighter(115) : QColor(p.border), 1));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(full);
 }

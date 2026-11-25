@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.4.0] — 2026-11-25
+
+主题、调音台与设置界面的完整设计；采集、合成、切换与输出沿用 0.3。
+
+### 新增
+
+- **三套主题**：`Charcoal`（vMix 炭灰 + 橙色强调，默认）、`Yami`（OBS `Yami.obt` 蓝灰 + `#284CB8`）、`Daylight`（浅色高对比）
+- **token 化样式表**：47 个 `Palette` token 驱动一份 QSS 模板（`theme_stylesheet.hpp`）与全部自绘控件；不再有散落的颜色字面量
+- **主题实时预览**：设置 → 常规的三张主题卡片带缩略图，选中即应用到主窗口，取消恢复原主题
+- **主题选择入口**：`--theme`、`MIXVERA_THEME`、`QSettings ui/theme`；支持 `yami`/`obs`、`daylight`/`light` 别名
+- **调音台重做**：OBS 式通道条（编号、名称、dB、竖向推子、`M`/`S`）、双电平平段主表、刻度与峰值保持、双击复位 0 dB、水平滚动
+- **独奏**：`AudioChannelState::solo` 与 `audio/solo_changed`；非独奏通道条变暗，头部显示 `SOLO n`
+- **设置界面重做**：左侧分类导航 + 六个分页（常规、视频、音频、输出、快捷键、关于）；主题、语言、恢复会话、画布、ffmpeg、RTMP 全部集中于此
+- **跟随系统语言** 与 **启动时恢复上次会话** 成为真实设置
+- **图标**：自绘 `chevron-down` / `chevron-up` / 浅色版 `check` SVG，用于下拉框、微调框与复选勾选
+- **截图 CLI**：`--theme`、`--show-mixer`、`--no-restore`、`--settings-screenshot`、`--settings-page`
+- 文档：新增 `docs/DESIGN.md`；`docs/UI-SPEC.md` 补充 0.4 主题/混音器/设置的证据映射
+
+### 变更
+
+- 默认工程中测试图案与纯色输入启用音频，首次启动调音台即有两条真实通道
+- 翻译规模 213 → 305 条，新增主题名/描述、混音器与设置页文案，全部完成
+- 版本号升至 0.4.0；窗口标题更新
+- 关于对话框补充 Qt、编译器、平台、许可与设计参考
+
+### 修复
+
+- QSS 模板中的占位符残留与强调色上的深色文字对比度
+- `QDialogButtonBox` 先 polish 后命名导致「确定」按钮未被主按钮样式覆盖（改为命名后 unpolish/polish）
+- 设置窗口截图后进程不退出（截图后显式 `close()` 再 `quit()`）
+- 推子槽在 Daylight 主题下对比度不足（改用 `borderStrong` 与内描边）
+- 电平表顶端刻度被裁切、`M`/`S` 文字过暗
+
+### 测试
+
+- UI smoke 新增主题用例：三套样式表非空、无残留 `{{token}}`、彼此不同、键别名正确、`daylight` 应用到主窗口
+- 四个测试目标全部通过（core / project / ui smoke / media）
+
 ## [0.3.0] — 2026-11-25
 
 简体中文界面 + vMix 式工作区重排。采集、合成、切换与输出能力沿用 0.2。
