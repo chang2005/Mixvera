@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(Mixvera
-    VERSION 0.5.0
+    VERSION 0.6.0
     DESCRIPTION "Mixvera professional live production switcher"
     LANGUAGES CXX)
 
@@ -55,7 +55,7 @@ else()
 endif()
 
 if(MIXVERA_BUILD_UI)
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia ZlibPrivate)
     add_library(mixvera_ui STATIC
         src/mixvera/ui/main_window.cpp
         src/mixvera/ui/stage_view.cpp
@@ -67,14 +67,18 @@ if(MIXVERA_BUILD_UI)
         src/mixvera/ui/theme.cpp
         src/mixvera/ui/add_input_dialog.cpp
         src/mixvera/ui/settings_dialog.cpp
+        src/mixvera/ui/title_element_dialog.cpp
         src/mixvera/ui/media/source_providers.cpp
+        src/mixvera/ui/media/title_package.cpp
+        src/mixvera/ui/media/qr_encoder.cpp
+        src/mixvera/ui/media/chroma_key.cpp
         src/mixvera/ui/media/compositor.cpp
         src/mixvera/ui/media/recorder.cpp
         src/mixvera/ui/media/audio_meter.cpp
         src/mixvera/ui/platform/win_capture.cpp
     )
     target_link_libraries(mixvera_ui PUBLIC
-        mixvera_core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia)
+        mixvera_core Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::ZlibPrivate)
     if(WIN32)
         target_link_libraries(mixvera_ui PRIVATE user32)
     endif()

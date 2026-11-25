@@ -5,6 +5,7 @@
 
 #include <QMainWindow>
 #include <QPoint>
+#include <QSize>
 
 #include <memory>
 
@@ -35,6 +36,16 @@ public:
 
     /// Shows or hides the audio mixer dock (used by --show-mixer and presets).
     void setMixerVisible(bool visible);
+
+    /// Switches the show canvas, including square and portrait sizes. The
+    /// compositor, monitors and project follow immediately. Pass persist=false
+    /// for screenshot or command line overrides that should not touch the
+    /// saved project.
+    void setCanvasSize(int width, int height, bool persist = true);
+    /// Selects the landscape or portrait display mode, preserving the current
+    /// long and short sides (a square canvas expands to 16:9 in that direction).
+    void setCanvasMode(bool portrait, bool persist = true);
+    QSize canvasSize() const;
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -70,7 +81,6 @@ private:
     void onOverlayCleared(const QString& id);
     void setOverlay(int layer, const std::string& inputId, bool enabled);
     void refreshOverlayButtons();
-    void onTitleAction(const QString& id, const QString& action);
     void onSnapshot();
 
     void onSceneSelected(const QString& id);
@@ -104,6 +114,11 @@ private:
     QString outputDirectory() const;
     QString nameOf(const std::string& id) const;
 
+private slots:
+    void onChromaKey(const QString& id, const QString& mode);
+    void onTitleAction(const QString& id, const QString& action);
+
+private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

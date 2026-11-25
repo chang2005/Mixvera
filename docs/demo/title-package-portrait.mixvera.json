@@ -1,0 +1,114 @@
+{
+  "canvas": {
+    "fps": 30,
+    "height": 1920,
+    "width": 1080
+  },
+  "inputs": [
+    {
+      "active": true,
+      "hasAudio": false,
+      "id": "image-1",
+      "items": [],
+      "kind": "image",
+      "muted": false,
+      "name": "Studio Background",
+      "params": {
+        "file": "docs/demo/studio-background.png"
+      },
+      "volumeDb": 0.0
+    },
+    {
+      "active": true,
+      "hasAudio": false,
+      "id": "title-1",
+      "items": [],
+      "kind": "title",
+      "muted": false,
+      "name": "Portrait Lower Third",
+      "params": {
+        "countdownPaused": "1",
+        "countdownRemaining": "185000",
+        "countdownSeconds": "300",
+        "package": "docs/demo/title-package-portrait.xaml",
+        "style": "package",
+        "subtitle": "",
+        "text": "",
+        "titleColor:Accent": "#FF3B82F6",
+        "titleColor:Badge": "#FFFF3B30",
+        "titleText:Badge Text": "LIVE",
+        "titleText:Clock": "{0:mm:ss}",
+        "titleText:Description": "Portrait title package · 1080 × 1920",
+        "titleText:Headline": "MIXVERA 竖屏标题",
+        "titleText:Ticker": "MIXVERA 竖屏标题包装  ·  字幕、比分与倒计时"
+      },
+      "volumeDb": 0.0
+    },
+    {
+      "active": true,
+      "hasAudio": false,
+      "id": "scene-1",
+      "items": [
+        {
+          "height": 1.0,
+          "input": "image-1",
+          "opacity": 1.0,
+          "visible": true,
+          "width": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "height": 1.0,
+          "input": "title-1",
+          "opacity": 1.0,
+          "visible": true,
+          "width": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "kind": "scene",
+      "muted": false,
+      "name": "Portrait Scene",
+      "params": {},
+      "volumeDb": 0.0
+    }
+  ],
+  "name": "GT Title Package — Portrait",
+  "outputs": {
+    "recordingDirectory": "recordings",
+    "streamKey": "",
+    "streamUrl": ""
+  },
+  "overlays": [
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 1
+    },
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 2
+    },
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 3
+    },
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 4
+    }
+  ],
+  "preview": "scene-1",
+  "program": "scene-1",
+  "schema": "mixvera.project",
+  "transition": {
+    "durationMs": 500,
+    "kind": "fade"
+  },
+  "version": 1
+}

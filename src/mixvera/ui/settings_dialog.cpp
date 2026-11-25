@@ -29,6 +29,7 @@
 #include <QSysInfo>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <functional>
 #include <numeric>
 
@@ -356,11 +357,20 @@ QWidget* SettingsDialog::buildVideoPage()
     auto* card = makeCard(tr("CANVAS"), content, &body);
     auto* form = makeForm();
 
+    mode_ = new QComboBox(card);
+    mode_->setObjectName("canvasMode");
+    mode_->addItem(tr("Landscape"), "landscape");
+    mode_->addItem(tr("Portrait"), "portrait");
+    form->addRow(tr("Display mode"), mode_);
+
     preset_ = new QComboBox(card);
     preset_->addItem("1920 × 1080 (Full HD)", QSize(1920, 1080));
     preset_->addItem("1280 × 720 (HD)", QSize(1280, 720));
     preset_->addItem("2560 × 1440 (QHD)", QSize(2560, 1440));
     preset_->addItem("3840 × 2160 (4K UHD)", QSize(3840, 2160));
+    preset_->addItem("1080 × 1920 (Portrait FHD)", QSize(1080, 1920));
+    preset_->addItem("720 × 1280 (Portrait HD)", QSize(720, 1280));
+    preset_->addItem("1080 × 1080 (Square)", QSize(1080, 1080));
     form->addRow(tr("Preset"), preset_);
 
     auto* sizeRow = new QHBoxLayout;
@@ -388,17 +398,51 @@ QWidget* SettingsDialog::buildVideoPage()
     form->addRow(tr("Frame rate"), fps_);
     body->addLayout(form);
     body->addWidget(note(tr("The canvas size drives the compositor and the recording "
-                            "resolution. Changes apply when you press OK."),
+                            "resolution. Portrait and square canvases are supported; "
+                            "changes apply when you press OK."),
         card));
     layout->addWidget(card);
 
+    connect(mode_, &QComboBox::currentIndexChanged, this, [this] {
+        const bool portrait = mode_->currentData().toString() == "portrait";
+        int width = width_->value();
+        int height = height_->value();
+        if (width == height) {
+            // A square canvas has no orientation of its own; expand the other
+            // side so switching modes produces a real landscape or portrait.
+            if (portrait) {
+                height = std::clamp(qRound(width * 16.0 / 9.0), 180, 4320);
+            } else {
+                width = std::clamp(qRound(height * 16.0 / 9.0), 320, 7680);
+            }
+        } else if (portrait != (height > width)) {
+            std::swap(width, height);
+        }
+        {
+            const QSignalBlocker blockWidth(width_);
+            const QSignalBlocker blockHeight(height_);
+            width_->setValue(width);
+            height_->setValue(height);
+        }
+        syncPresetFromSize();
+        updateAspectLabel();
+    });
     connect(preset_, &QComboBox::currentIndexChanged, this, [this] {
         const QSize size = preset_->currentData().toSize();
+        if (!size.isValid()) {
+            return;
+        }
         width_->setValue(size.width());
         height_->setValue(size.height());
     });
-    connect(width_, &QSpinBox::valueChanged, this, [this] { updateAspectLabel(); });
-    connect(height_, &QSpinBox::valueChanged, this, [this] { updateAspectLabel(); });
+    connect(width_, &QSpinBox::valueChanged, this, [this] {
+        syncModeFromSize();
+        updateAspectLabel();
+    });
+    connect(height_, &QSpinBox::valueChanged, this, [this] {
+        syncModeFromSize();
+        updateAspectLabel();
+    });
     updateAspectLabel();
 
     return pageShell(tr("Video"), tr("Canvas resolution and frame rate for the whole show."),
@@ -667,6 +711,32 @@ void SettingsDialog::updateAspectLabel()
     aspect_->setText(tr("%1:%2").arg(width_->value() / divisor).arg(height_->value() / divisor));
 }
 
+void SettingsDialog::syncModeFromSize()
+{
+    if (!mode_) {
+        return;
+    }
+    const bool portrait = height_->value() > width_->value();
+    const QSignalBlocker blocker(mode_);
+    mode_->setCurrentIndex(mode_->findData(portrait ? "portrait" : "landscape"));
+}
+
+void SettingsDialog::syncPresetFromSize()
+{
+    if (!preset_) {
+        return;
+    }
+    const QSize size(width_->value(), height_->value());
+    const QSignalBlocker blocker(preset_);
+    for (int row = 0; row < preset_->count(); ++row) {
+        if (preset_->itemData(row).toSize() == size) {
+            preset_->setCurrentIndex(row);
+            return;
+        }
+    }
+    preset_->setCurrentIndex(-1);
+}
+
 theme::ThemeId SettingsDialog::theme() const
 {
     return theme_;
@@ -682,18 +752,13 @@ void SettingsDialog::setValues(int width, int height, int fps,
 {
     width_->setValue(width);
     height_->setValue(height);
+    syncModeFromSize();
+    syncPresetFromSize();
     const int index = fps_->findData(fps);
     fps_->setCurrentIndex(index < 0 ? fps_->findData(30) : index);
     recordingDirectory_->setText(recordingDirectory);
     streamUrl_->setText(streamUrl);
     streamKey_->setText(streamKey);
-
-    for (int row = 0; row < preset_->count(); ++row) {
-        if (preset_->itemData(row).toSize() == QSize(width, height)) {
-            preset_->setCurrentIndex(row);
-            break;
-        }
-    }
     updateAspectLabel();
 }
 

@@ -8,17 +8,21 @@
 #include "mixvera/ui/add_input_dialog.hpp"
 #include "mixvera/ui/input_panel.hpp"
 #include "mixvera/ui/media/audio_meter.hpp"
+#include "mixvera/ui/media/chroma_key.hpp"
 #include "mixvera/ui/media/compositor.hpp"
 #include "mixvera/ui/media/recorder.hpp"
+#include "mixvera/ui/media/title_package.hpp"
 #include "mixvera/ui/mixer_panel.hpp"
 #include "mixvera/ui/scene_panel.hpp"
 #include "mixvera/ui/settings_dialog.hpp"
 #include "mixvera/ui/stage_view.hpp"
 #include "mixvera/ui/status_bar.hpp"
 #include "mixvera/ui/theme.hpp"
+#include "mixvera/ui/title_element_dialog.hpp"
 #include "mixvera/ui/transition_bar.hpp"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -30,6 +34,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
@@ -119,6 +124,8 @@ struct MainWindow::Impl {
     QSplitter* workspace = nullptr;
     QToolButton* scenesToggle = nullptr;
     QToolButton* mixerToggle = nullptr;
+    QAction* landscapeAction = nullptr;
+    QAction* portraitAction = nullptr;
 
     QLabel* projectLabel = nullptr;
     QLabel* recPill = nullptr;
@@ -153,7 +160,8 @@ MainWindow::MainWindow(bool restoreSession, QWidget* parent)
     : QMainWindow(parent)
     , impl_(std::make_unique<Impl>())
 {
-    setWindowTitle(tr("Mixvera 0.5 — Live Production Switcher"));
+    setWindowTitle(tr("Mixvera %1 — Live Production Switcher")
+            .arg(QCoreApplication::applicationVersion()));
     resize(1600, 960);
     setMinimumSize(1280, 760);
 
@@ -511,6 +519,20 @@ void MainWindow::buildMenus()
     connect(mixerAction, &QAction::toggled, impl_->mixerToggle, &QToolButton::setChecked);
     connect(impl_->mixerToggle, &QToolButton::toggled, mixerAction, &QAction::setChecked);
     view->addSeparator();
+    auto* canvasModeGroup = new QActionGroup(this);
+    canvasModeGroup->setExclusive(true);
+    impl_->landscapeAction = view->addAction(tr("Landscape Mode"));
+    impl_->landscapeAction->setObjectName("landscapeCanvasAction");
+    impl_->landscapeAction->setCheckable(true);
+    canvasModeGroup->addAction(impl_->landscapeAction);
+    connect(impl_->landscapeAction, &QAction::triggered, this,
+        [this] { setCanvasMode(false); });
+    impl_->portraitAction = view->addAction(tr("Portrait Mode"));
+    impl_->portraitAction->setObjectName("portraitCanvasAction");
+    impl_->portraitAction->setCheckable(true);
+    canvasModeGroup->addAction(impl_->portraitAction);
+    connect(impl_->portraitAction, &QAction::triggered, this,
+        [this] { setCanvasMode(true); });
     view->addAction(tr("Toggle Fullscreen"), this, [this] {
         isFullScreen() ? showNormal() : showFullScreen();
     });
@@ -542,19 +564,25 @@ void MainWindow::buildMenus()
 
     auto* help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("&About Mixvera"), this, [this] {
-        QMessageBox::about(this, tr("About Mixvera"),
-            tr("<h3>Mixvera 0.5</h3>"
+        const QString about = tr("<h3>Mixvera %1</h3>"
                "<p>Live production switcher: scene based compositing, real capture "
                "inputs, CUT / AUTO / T-Bar transitions with Fly and Cube, four "
-               "downstream overlay layers, lower third / countdown / scoreboard "
-               "titles, a channel-strip audio mixer, PNG snapshots and ffmpeg "
-               "recording.</p>"
+               "downstream overlay layers, vMix / SinSam GT title packages with "
+               "editable text, colour and image elements, built-in lower third / "
+               "countdown / scoreboard / subtitle / ticker titles, blue and green "
+               "chroma key, explicit landscape and portrait modes, a channel-strip "
+               "audio mixer, PNG snapshots and ffmpeg recording.</p>"
+               "<p>Title packages can be .gtzip, .sinsamtitle or loose GT "
+               "composition .xaml, with preset text, score, ticker and countdown "
+               "control from the input menu.</p>"
                "<p>The workspace follows vMix: preview on the left, program on the "
                "right and a vertical transition cluster between them. The input "
                "bar, overlay row and footer keep the show controls within one "
                "click.</p>"
                "<p>Three themes (Charcoal, Yami, Daylight), an OBS style settings "
-               "window and a Simplified Chinese / English interface.</p>"));
+               "window and a Simplified Chinese / English interface.</p>")
+                                   .arg(QCoreApplication::applicationVersion());
+        QMessageBox::about(this, tr("About Mixvera"), about);
     });
 }
 
@@ -606,6 +634,8 @@ void MainWindow::connectSignals()
         &MainWindow::onOverlayAssigned);
     connect(impl_->inputsPanel, &InputPanel::overlayClearRequested, this,
         &MainWindow::onOverlayCleared);
+    connect(impl_->inputsPanel, &InputPanel::chromaKeyRequested, this,
+        &MainWindow::onChromaKey);
     connect(impl_->inputsPanel, &InputPanel::titleActionRequested, this,
         &MainWindow::onTitleAction);
     connect(impl_->inputsPanel, &InputPanel::removeRequested, this, &MainWindow::onInputRemove);
@@ -706,6 +736,13 @@ void MainWindow::applyProject(core::Project project)
     impl_->compositor->setCanvasSize(QSize(impl_->project.canvasWidth,
         impl_->project.canvasHeight));
     impl_->compositor->setFrameRate(impl_->project.fps);
+    if (impl_->portraitAction && impl_->landscapeAction) {
+        const bool portrait = impl_->project.canvasHeight > impl_->project.canvasWidth;
+        const QSignalBlocker blockLandscape(impl_->landscapeAction);
+        const QSignalBlocker blockPortrait(impl_->portraitAction);
+        impl_->landscapeAction->setChecked(!portrait);
+        impl_->portraitAction->setChecked(portrait);
+    }
 
     impl_->inputService->clear();
     impl_->inputService->load(impl_->project.inputs);
@@ -769,6 +806,64 @@ void MainWindow::applyProject(core::Project project)
 
     refreshPanels();
     refreshStatus();
+}
+
+void MainWindow::setCanvasSize(int width, int height, bool persist)
+{
+    width = std::clamp(width, 320, 7680);
+    height = std::clamp(height, 180, 4320);
+    impl_->project.canvasWidth = width;
+    impl_->project.canvasHeight = height;
+    impl_->compositor->setCanvasSize(QSize(width, height));
+    if (impl_->portraitAction && impl_->landscapeAction) {
+        const bool portrait = height > width;
+        const QSignalBlocker blockLandscape(impl_->landscapeAction);
+        const QSignalBlocker blockPortrait(impl_->portraitAction);
+        impl_->landscapeAction->setChecked(!portrait);
+        impl_->portraitAction->setChecked(portrait);
+    }
+    if (impl_->program) {
+        impl_->program->update();
+    }
+    if (impl_->preview) {
+        impl_->preview->update();
+    }
+    refreshStatus();
+    statusBar()->showMessage(tr("Canvas: %1 × %2").arg(width).arg(height), 4000);
+    if (persist) {
+        persistProject();
+    }
+}
+
+void MainWindow::setCanvasMode(bool portrait, bool persist)
+{
+    int width = impl_->project.canvasWidth;
+    int height = impl_->project.canvasHeight;
+    if (portrait) {
+        if (height > width) {
+            return;
+        }
+        if (width == height) {
+            height = std::clamp(qRound(width * 16.0 / 9.0), 180, 4320);
+        } else {
+            std::swap(width, height);
+        }
+    } else {
+        if (width > height) {
+            return;
+        }
+        if (width == height) {
+            width = std::clamp(qRound(height * 16.0 / 9.0), 320, 7680);
+        } else {
+            std::swap(width, height);
+        }
+    }
+    setCanvasSize(width, height, persist);
+}
+
+QSize MainWindow::canvasSize() const
+{
+    return QSize(impl_->project.canvasWidth, impl_->project.canvasHeight);
 }
 
 void MainWindow::applyTheme(theme::ThemeId id)
@@ -1165,6 +1260,42 @@ void MainWindow::onOverlayCleared(const QString& id)
     statusBar()->showMessage(tr("%1 removed from overlays").arg(nameOf(inputId)), 4000);
 }
 
+void MainWindow::onChromaKey(const QString& id, const QString& mode)
+{
+    const auto* input = impl_->inputService->find(id.toStdString());
+    if (!input || !inputSupportsChromaKey(input->kind)) {
+        return;
+    }
+    if (mode != "off" && mode != "green" && mode != "blue") {
+        return;
+    }
+
+    auto copy = *input;
+    if (mode == "off") {
+        copy.params["chromaEnabled"] = "0";
+    } else {
+        copy.params["chromaEnabled"] = "1";
+        copy.params["chromaPreset"] = mode.toStdString();
+        copy.params["chromaColor"] = mode == "green" ? "#00ff00" : "#0000ff";
+        if (copy.params.find("chromaSimilarity") == copy.params.end()) {
+            copy.params["chromaSimilarity"] = "35";
+        }
+        if (copy.params.find("chromaSmoothness") == copy.params.end()) {
+            copy.params["chromaSmoothness"] = "18";
+        }
+        if (copy.params.find("chromaSpill") == copy.params.end()) {
+            copy.params["chromaSpill"] = "60";
+        }
+    }
+    impl_->inputService->update(copy);
+    refreshPanels();
+    schedulePersist();
+    statusBar()->showMessage(mode == "off"
+            ? tr("Chroma key removed from %1").arg(nameOf(copy.id))
+            : tr("Chroma key set on %1").arg(nameOf(copy.id)),
+        4000);
+}
+
 void MainWindow::onTitleAction(const QString& id, const QString& action)
 {
     const auto* input = impl_->inputService->find(id.toStdString());
@@ -1181,6 +1312,181 @@ void MainWindow::onTitleAction(const QString& id, const QString& action)
     };
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     bool changed = true;
+
+    if (action == "elements") {
+        const QString packagePath = read(title_params::kPackage);
+        const TitlePackage package = TitlePackage::load(packagePath);
+        if (!package.isValid()) {
+            QMessageBox::warning(this, tr("Title Elements"),
+                tr("This title input does not have a readable GT title package."));
+            return;
+        }
+        QHash<QString, QString> texts;
+        QHash<QString, QColor> colours;
+        QHash<QString, QString> images;
+        for (const auto& entry : copy.params) {
+            const QString key = QString::fromStdString(entry.first);
+            const QString value = QString::fromStdString(entry.second);
+            if (key.startsWith(QLatin1String(title_params::kTextPrefix))) {
+                texts.insert(key.mid(10), value);
+            } else if (key.startsWith(QLatin1String(title_params::kColourPrefix))) {
+                const QColor colour(value);
+                if (colour.isValid()) {
+                    colours.insert(key.mid(11), colour);
+                }
+            } else if (key.startsWith(QLatin1String(title_params::kImagePrefix))) {
+                images.insert(key.mid(11), value);
+            }
+        }
+        TitleElementDialog dialog(package, texts, colours, images, canvasSize(), this);
+        if (dialog.exec() != QDialog::Accepted) {
+            return;
+        }
+        texts = dialog.textValues();
+        colours = dialog.colourValues();
+        images = dialog.imageValues();
+        for (auto it = copy.params.begin(); it != copy.params.end();) {
+            const QString key = QString::fromStdString(it->first);
+            if (key.startsWith(QLatin1String(title_params::kTextPrefix))
+                || key.startsWith(QLatin1String(title_params::kColourPrefix))
+                || key.startsWith(QLatin1String(title_params::kImagePrefix))) {
+                it = copy.params.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = texts.constBegin(); it != texts.constEnd(); ++it) {
+            copy.params[title_params::textKey(it.key()).toStdString()]
+                = it.value().toStdString();
+        }
+        for (auto it = colours.constBegin(); it != colours.constEnd(); ++it) {
+            copy.params[title_params::colourKey(it.key()).toStdString()]
+                = it.value().name(QColor::HexRgb).toStdString();
+        }
+        for (auto it = images.constBegin(); it != images.constEnd(); ++it) {
+            copy.params[title_params::imageKey(it.key()).toStdString()]
+                = it.value().toStdString();
+        }
+        impl_->inputService->update(copy);
+        refreshPanels();
+        schedulePersist();
+        statusBar()->showMessage(tr("Title elements updated for %1").arg(nameOf(copy.id)),
+            4000);
+        return;
+    }
+
+    if (action == "presetSave") {
+        const auto presetKey = [](int index, const QString& field) {
+            return QStringLiteral("titlePreset:%1:%2").arg(index).arg(field);
+        };
+        int index = -1;
+        for (int candidate = 0; candidate < 10; ++candidate) {
+            if (copy.params.find(presetKey(candidate, QStringLiteral("label")).toStdString())
+                == copy.params.end()) {
+                index = candidate;
+                break;
+            }
+        }
+        if (index < 0) {
+            QMessageBox::information(this, tr("Title Presets"),
+                tr("All 10 title preset slots are in use. Delete the presets first."));
+            return;
+        }
+        bool accepted = false;
+        const QString label = QInputDialog::getText(this, tr("Save Title Preset"),
+            tr("Preset name:"), QLineEdit::Normal, tr("Preset %1").arg(index + 1),
+            &accepted);
+        if (!accepted) {
+            return;
+        }
+        copy.params[presetKey(index, QStringLiteral("label")).toStdString()]
+            = (label.trimmed().isEmpty() ? tr("Preset %1").arg(index + 1) : label.trimmed())
+                  .toStdString();
+        for (const auto& entry : copy.params) {
+            const QString key = QString::fromStdString(entry.first);
+            if (key.startsWith(QLatin1String(title_params::kTextPrefix))
+                || key.startsWith(QLatin1String(title_params::kColourPrefix))
+                || key.startsWith(QLatin1String(title_params::kImagePrefix))) {
+                copy.params[presetKey(index, key).toStdString()] = entry.second;
+            }
+        }
+        impl_->inputService->update(copy);
+        refreshPanels();
+        schedulePersist();
+        statusBar()->showMessage(tr("Title preset saved for %1").arg(nameOf(copy.id)), 4000);
+        return;
+    }
+
+    if (action == "presetNext" || action == "presetPrev" || action == "presetClear") {
+        const QString presetPrefix = QStringLiteral("titlePreset:");
+        if (action == "presetClear") {
+            for (auto it = copy.params.begin(); it != copy.params.end();) {
+                if (QString::fromStdString(it->first).startsWith(presetPrefix)) {
+                    it = copy.params.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            impl_->inputService->update(copy);
+            refreshPanels();
+            schedulePersist();
+            statusBar()->showMessage(tr("Title presets deleted for %1").arg(nameOf(copy.id)),
+                4000);
+            return;
+        }
+        QVector<int> indices;
+        for (int candidate = 0; candidate < 10; ++candidate) {
+            if (copy.params.find(QStringLiteral("titlePreset:%1:label").arg(candidate)
+                    .toStdString())
+                != copy.params.end()) {
+                indices.append(candidate);
+            }
+        }
+        if (indices.isEmpty()) {
+            QMessageBox::information(this, tr("Title Presets"),
+                tr("No title presets are saved for this input."));
+            return;
+        }
+        const int current = read("titlePresetActive").toInt();
+        int position = indices.indexOf(current);
+        if (position < 0) {
+            position = action == "presetNext" ? -1 : 0;
+        }
+        const int step = action == "presetNext" ? 1 : -1;
+        const int next = indices.at((position + step + indices.size()) % indices.size());
+        const QString prefix = QStringLiteral("titlePreset:%1:").arg(next);
+        for (auto it = copy.params.begin(); it != copy.params.end();) {
+            const QString key = QString::fromStdString(it->first);
+            if (key.startsWith(QLatin1String(title_params::kTextPrefix))
+                || key.startsWith(QLatin1String(title_params::kColourPrefix))
+                || key.startsWith(QLatin1String(title_params::kImagePrefix))) {
+                it = copy.params.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        QVector<QPair<QString, QString>> presetEntries;
+        for (const auto& entry : copy.params) {
+            const QString key = QString::fromStdString(entry.first);
+            if (key.startsWith(prefix) && key != prefix + QLatin1String("label")) {
+                presetEntries.append({ key.mid(prefix.size()),
+                    QString::fromStdString(entry.second) });
+            }
+        }
+        for (const auto& entry : presetEntries) {
+            copy.params[entry.first.toStdString()] = entry.second.toStdString();
+        }
+        write("titlePresetActive", next);
+        write("titlePresetChanged", now);
+        impl_->inputService->update(copy);
+        refreshPanels();
+        schedulePersist();
+        statusBar()->showMessage(tr("Title preset applied: %1")
+                .arg(QString::fromStdString(copy.params.at(
+                    QStringLiteral("titlePreset:%1:label").arg(next).toStdString()))),
+            4000);
+        return;
+    }
 
     if (action == "countdownStart") {
         qint64 duration = read("countdownSeconds").toLongLong();
@@ -1223,6 +1529,28 @@ void MainWindow::onTitleAction(const QString& id, const QString& action)
         const char* key = home ? "scoreHome" : "scoreAway";
         const int score = std::max(0, read(key).toInt() + (plus ? 1 : -1));
         write(key, score);
+    } else if (action == "captionSet") {
+        bool accepted = false;
+        const QString text = QInputDialog::getMultiLineText(this, tr("Subtitle Text"),
+            tr("Text shown on program:"), read("text"), &accepted);
+        if (accepted) {
+            copy.params["text"] = text.toStdString();
+        } else {
+            changed = false;
+        }
+    } else if (action == "captionNext" || action == "captionPrev") {
+        const QStringList lines = read("captions").split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        if (lines.isEmpty()) {
+            changed = false;
+        } else {
+            const int count = static_cast<int>(lines.size());
+            int index = read("captionIndex").toInt();
+            index = (index + (action == "captionNext" ? 1 : -1) + count) % count;
+            write("captionIndex", index);
+            copy.params["text"] = lines[index].trimmed().toStdString();
+        }
+    } else if (action == "captionClear") {
+        copy.params["text"].clear();
     } else {
         changed = false;
     }
@@ -1736,15 +2064,12 @@ void MainWindow::onSettings()
             tr("The interface language will change the next time Mixvera starts."));
     }
 
-    impl_->project.canvasWidth = dialog.canvasWidth();
-    impl_->project.canvasHeight = dialog.canvasHeight();
+    setCanvasSize(dialog.canvasWidth(), dialog.canvasHeight(), false);
     impl_->project.fps = dialog.fps();
     impl_->project.outputs.recordingDirectory = dialog.recordingDirectory().toStdString();
     impl_->project.outputs.streamUrl = dialog.streamUrl().toStdString();
     impl_->project.outputs.streamKey = dialog.streamKey().toStdString();
 
-    impl_->compositor->setCanvasSize(QSize(impl_->project.canvasWidth,
-        impl_->project.canvasHeight));
     impl_->compositor->setFrameRate(impl_->project.fps);
     if (impl_->tickTimer) {
         impl_->tickTimer->setInterval(1000 / std::max(1, impl_->project.fps));

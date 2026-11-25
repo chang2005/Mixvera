@@ -1,6 +1,20 @@
 # Mixvera
 
-Mixvera 是一个面向现场导播场景的开源切换台。`0.5.0` 在 0.4 的主题、调音台与设置之上，把对 SinSam（芯象）安装包的只读逆向结果落地为**四路下游叠加层、Fly / Cube 转场、标题预置（下三分之一 / 倒计时 / 比分牌）与快照**。
+Mixvera 是一个面向现场导播场景的开源切换台。`0.6.0` 在 0.5 的叠加层、转场与标题之上，加入芯象（SinSam）风格的**竖屏 / 方形画布、横竖屏显示模式、蓝绿幕抠像与字幕叠加**，并移植 vMix GT / 芯象（SinSam）的**标题包装**：直接打开 `.gtzip`，渲染元素、渐变、图片、滚动字幕、二维码与时钟，支持命名预置与数据变更动画。
+
+![Mixvera 0.6 横屏 GT 标题包装](docs/demo/mixvera-0.6-landscape-package.png)
+
+![Mixvera 0.6 竖屏 GT 标题包装](docs/demo/mixvera-0.6-portrait-package.png)
+
+![Mixvera 0.6 设置 → 视频：显式选择横屏 / 竖屏](docs/demo/mixvera-0.6-settings-display-zh.png)
+
+芯象竖屏、抠像与字幕：
+
+![Mixvera 0.6 中文竖屏、绿幕抠像与字幕条](docs/demo/mixvera-0.6-zh-portrait-chroma.png)
+
+![Mixvera 0.6 英文蓝幕抠像与滚动字幕](docs/demo/mixvera-0.6-en-blue-ticker.png)
+
+0.5 的四路叠加层、Fly / Cube 转场、标题预置与快照沿用不变：
 
 ![Mixvera 0.5 叠加层与标题（中文）](docs/demo/mixvera-0.5-zh-overlay.png)
 
@@ -11,6 +25,68 @@ Mixvera 是一个面向现场导播场景的开源切换台。`0.5.0` 在 0.4 �
 ![Mixvera 0.4 中文炭灰主题](docs/demo/mixvera-0.4-zh-charcoal.png)
 
 ![Mixvera 0.4 Yami 主题](docs/demo/mixvera-0.4-en-yami.png)
+
+## 0.6 新增（芯象竖屏 / 显示模式 / 抠像 / 字幕 / GT 标题包装）
+
+证据来源：对 `sinsam_setup.26.7.10.3.exe` 的只读逆向（未运行安装包），以及本机 vMix 28 安装目录 `titles/` 下 **743 个 `.gtzip` 与 87 个 `.xaml`** 的只读解析。芯象证据与取舍见 [docs/RE-SINSAM.md](docs/RE-SINSAM.md)，界面映射见 [docs/UI-SPEC.md](docs/UI-SPEC.md)。包装文件只作为输入读取，仓库不分发任何 vMix / SinSam 模板。
+
+### 标题包装
+
+添加输入 → 标题的第七种样式。选择 `.gtzip`、未压缩的包装目录或散装 `.xaml` / `.sinsamtitle` 后，Mixvera 用自写渲染器按 GT 文档逐帧绘制，并把包装缩放到当前画布：
+
+| 类别 | 支持 |
+| --- | --- |
+| 容器与形状 | `Composition`、`Layer`、`Rectangle`（圆角 / 描边）、`Ellipse`、`Triangle`、`RightTriangle` |
+| 文本与媒体 | `TextBlock`（字体、字号、粗体、对齐、换行）、`Image`（铺满 / 等比）、`Ticker` |
+| 画笔 | `Solid`、`LinearGradient`、`RadialGradient`、`Transparent`、`Bitmap` |
+| 动画 | Fade / Fly / Reveal / Expand / ZoomFade / Zoom / Bounce / Rotate；入口、`TransitionOut`、`DataChangeIn/Out` |
+| 动态内容 | `{0:...}` 时钟 / 倒计时、`QRCode`（真实二维码编码） |
+
+- **几何与旋转**：`Location` / `Dimensions` 以设计画布为单位；`Transform Rotate` 取 z 轴弧度。GT Vertical 的 3412×1920 艺术板按高度缩放并居中，裁切后仍对准中心 1080×1920 区域
+- **滚动字幕**：自动取 Ticker 模板里最宽的文本块；Direction 为 top / bottom / up / down / vertical 时整条旋转 −90° 竖向滚动，其余水平滚动
+- **时钟**：`{0:HH:mm:ss}`、`{0:hh:mm tt}`、`{0:4:00PM|mm:ss}` 等 .NET 自定义格式；倒计时使用 `|` 后的格式段，暂停时数字冻结
+- **二维码**：ISO/IEC 18004 字节模式、纠错等级 M、版本 1–10、自动掩码选择；内容超过 213 字节时显示红色占位
+- **元素编辑**：「Elements…」列出可编辑的文本 / 图片 / 颜色元素；覆盖随工程保存，不改动原始包装文件
+- **命名预置**：每个包装 10 组命名快照，输入条右键保存 / 上一个 / 下一个 / 删除；切换预置播放包装自己的 `DataChangeIn` 动画，且不打断入场动画与滚动字幕
+
+### 显示模式
+
+- 设置 → 视频的第一项就是「显示模式」：横屏 / 竖屏。切换时保留长短边并交换宽高；方形画布会展开为 16:9，避免出现没有方向的「竖屏 1080×1080」
+- 预设、宽高输入与像素比标签联动：选 `1080 × 1920 (Portrait FHD)` 会自动切到竖屏，改宽高也会同步模式
+- 「视图 → 横屏模式 / 竖屏模式」可在演出中一键切换；`--mode landscape|portrait` 可在启动时指定
+- 显示模式只决定画布方向；工作区仍是横向双监视器
+
+### 竖屏与方形画布
+
+- 设置 → 视频新增 `1080 × 1920`（Portrait FHD）、`720 × 1280`（Portrait HD）、`1080 × 1080`（Square）预设
+- 「视图 → 横屏模式 / 竖屏模式」一键切换：保留当前长短边，交换宽高；与设置里的显示模式同步（见上）
+- 启动参数 `--canvas 1080x1920` 可直接指定画布，适合竖屏直播与手机端录制
+- 画布尺寸同时驱动合成、录制、推流与快照；标题会按画布宽度重新排版，竖屏下字幕贴底而不是被裁掉
+
+### 蓝 / 绿幕抠像
+
+- 任意采集、图片或视频输入可开启色度键控；绿幕 / 蓝幕一键预设，也可选任意自定义色
+- 三个参数：**相似度**（键色容差）、**平滑度**（边缘羽化）、**溢色抑制**（压掉头发与肩部的绿/蓝边）
+- 添加输入对话框有独立的「CHROMA KEY」面板；输入条右键「抠像」可以随时切换关 / 绿幕 / 蓝幕
+- 抠像发生在采集之后、场景合成之前，叠加层、转场、录制、推流与快照得到的都是抠像后的画面
+- 参数随工程保存；调整参数时采集源不会重建，摄像头画面不闪断
+
+### 字幕叠加
+
+标题样式由四种扩展为七种：
+
+| 样式 | 内容 |
+| --- | --- |
+| 全屏标题 | 多行文本样式 |
+| 下三分之一字幕 | 主标题 + 副标题、左侧强调色条 |
+| 倒计时 | 居中 `MM:SS`、进度条、真实时钟 |
+| 比分牌 | 赛事名 + 主客队比分 |
+| **字幕条** | 底部安全区半透明底板、居中自动换行、强调色下划线 |
+| **滚动字幕** | 底部滚动条，从右向左无缝循环，速度 20–800 px/s |
+| **标题包装** | 读取 GT `.gtzip` / `.xaml`，保留模板布局、动画与时钟 |
+
+- 字幕 / 滚动字幕输入可预置多行文案，右键「设置字幕文字…」或「下一句 / 上一句 / 清除字幕」实时切换
+- 字幕与下三分之一不同：字幕条始终贴底、按画布宽度自适应，适合访谈、带货与竖屏短视频
 
 ## 0.5 新增（SinSam 移植）
 
@@ -45,7 +121,7 @@ Mixvera 是一个面向现场导播场景的开源切换台。`0.5.0` 在 0.4 �
 
 - 输入条右键「标题控制」：开始 / 暂停 / 重置倒计时，主客队得分 ±1，全部实时生效
 - 倒计时剩余时间与比分随工程保存，重启不丢
-- 不兼容 SinSam 的 `.gtzip` 设计器格式；改用内置预置
+- 0.5 的标题使用内置预置；0.6 起新增「标题包装」样式，可直接打开 vMix / SinSam 的 `.gtzip` / `.xaml`（见上）
 
 ### 快照
 
@@ -107,9 +183,11 @@ Mixvera 是一个面向现场导播场景的开源切换台。`0.5.0` 在 0.4 �
 | 屏幕采集 | 按显示器序号抓取整个桌面 |
 | 窗口采集 | 枚举可见顶层窗口，优先抓窗口本体，失败回退到屏幕区域 |
 | 摄像头 | 通过 Qt Multimedia 采集，系统里没有摄像头时列表为空 |
-| 图片 / 视频文件 | 图片直接显示；视频循环播放，画面进入合成 |
-| 标题 | 四种样式（全屏 / 下三分之一 / 倒计时 / 比分牌），倒计时与比分可实时控制 |
+| 图片 / 视频文件 | 图片直接显示；视频循环播放，画面进入合成；可开启抠像 |
+| 标题 | 七种样式（全屏 / 下三分之一 / 倒计时 / 比分牌 / 字幕条 / 滚动字幕 / **标题包装**），倒计时、比分与字幕文字可实时控制；标题包装读取 GT `.gtzip` / `.xaml` |
 | 纯色 / 测试图案 | 用于垫场与信号检查，测试图案带活动扫描光带和时码 |
+
+采集类输入（屏幕 / 窗口 / 摄像头 / 图片 / 视频）都可以开启蓝绿幕抠像；标题、纯色与场景不做抠像。
 
 ### 场景与图层
 
@@ -163,14 +241,16 @@ Mixvera 是一个面向现场导播场景的开源切换台。`0.5.0` 在 0.4 �
 
 ## 界面来源
 
-界面不是凭印象画的，颜色、控件命名与信息组织取自 OBS Studio 33.0.3 安装包（本机安装为 32.1.2）、vMix 28 的可读产物与 SinSam 26.7.10.3 安装包的只读逆向。0.4 的 Yami 主题、调音台通道条与设置分类直接对应前两份证据；0.5 的叠加层、Fly / Cube 转场与标题预置对应第三份：
+界面不是凭印象画的，颜色、控件命名与信息组织取自 OBS Studio 33.0.3 安装包（本机安装为 32.1.2）、vMix 28 的可读产物与 SinSam 26.7.10.3 安装包的只读逆向。0.4 的 Yami 主题、调音台通道条与设置分类直接对应前两份证据；0.5 的叠加层、Fly / Cube 转场与标题预置，以及 0.6 的竖屏、显示模式、抠像、字幕与 GT 标题包装对应第三份与 vMix 本机模板库：
 
 - **vMix 主窗口**：官方帮助页的主界面截图（`build/analysis/vmix/NewItem446.png`，本机分析目录，未入库）用于确定预览左 / 节目右的布局、中央竖向转场列、底部横向输入条与功能栏；从截图采样得到背景 `#1E2328`、转场面板 `#404B56`、预览橙 `#FF8C00`、节目绿 `#006400`、页脚 `#293038`、状态栏 `#0A0F14`
 - **vMix 语言包**：`languages/en.txt` 的 `frmmain.*` 控件清单（Cut / Fade / Wipe / Slide / Zoom / FTB、Add Input、Overlay、Record、Stream、Audio Mixer、Settings）与 `zh.txt` 的中文条目，用于确认功能集合和中文术语取舍
 - **OBS**：`Yami.obt` 的三级深色表面与 `--blue3` 强调色成为 0.4 的 Yami 主题；`volMeterFrame`、`vMixerScrollArea` 等对象名与混音器语义对应通道条设计；`locale/zh-CN.ini` 提供专业中文术语（硬切、淡入淡出、划像、推流、录制等）
 - **设置分类**：OBS「常规 / 视频 / 音频 / 输出 / 快捷键 / 关于」的分页方式成为 0.4 设置对话框的信息架构
+- **SinSam（芯象）**：`sinsam.dll` 中的 `竖屏功能`、`横屏` / `竖屏`、`蓝绿专用抠图`、`任意颜色抠图`、`高级抠图`、`本地字幕`、`字幕文案`、`TitleTicker`、`TitleSpeech` 等字符串与托管类型确认了竖屏、抠像与字幕的功能面与参数分组；字幕导入过滤器 `.xaml;.gtzip`、`.sinsamtitle` 与 100 MB 上限确认了包装的格式面。Mixvera 只借鉴画布方向、抠像参数（主色 / 容差 / 边缘 / 溢色）、逐句字幕切换与 GT 文档语义，没有使用 SinSam 的模板、图标、视觉样式或在线服务
+- **vMix GT 标题库**：本机 vMix 28 安装目录 `titles/` 下的 743 个 `.gtzip` 与 87 个 `.xaml` 只读解析（GT Title 400、GT Vertical 147、GT Stingers 66、GT Social 63、GT ScoreBoard / Text / Timer / Ticker 共 67），用于确认 `document.xml` 的元素、画笔、Storyboard、Ticker 与 Timer 语义；Mixvera 用自写渲染器读取这套文档，不分发任何模板文件
 
-完整的对照与取舍见 [docs/UI-SPEC.md](docs/UI-SPEC.md)，主题 token、布局尺寸、调音台与设置的行为约定见 [docs/DESIGN.md](docs/DESIGN.md)。程序原工程结构复原（OBS 的 CMake / Qt / libobs / 插件树，vMix 的 VB.NET 模块与窗体清单）见 [docs/RE-PROJECTS.md](docs/RE-PROJECTS.md)，SinSam 安装包的功能地图与 0.5 取舍见 [docs/RE-SINSAM.md](docs/RE-SINSAM.md)。没有复制任何 OBS、vMix 或 SinSam 的代码、图标、模板或资源；只借鉴公开可观察的界面组织、总线顺序与配色值。
+完整的对照与取舍见 [docs/UI-SPEC.md](docs/UI-SPEC.md)，主题 token、布局尺寸、调音台与设置的行为约定见 [docs/DESIGN.md](docs/DESIGN.md)。程序原工程结构复原（OBS 的 CMake / Qt / libobs / 插件树，vMix 的 VB.NET 模块与窗体清单）见 [docs/RE-PROJECTS.md](docs/RE-PROJECTS.md)，SinSam 安装包的功能地图与 0.5 / 0.6 取舍见 [docs/RE-SINSAM.md](docs/RE-SINSAM.md)。没有复制任何 OBS、vMix 或 SinSam 的代码、图标、模板或资源；只借鉴公开可观察的界面组织、总线顺序与配色值。
 
 > vMix 28 已安装但未购买授权，直接启动会停在 “License Request” 对话框，因此无法对运行中的界面截图；布局证据来自官方帮助截图。vMix 29 安装包只做了只读识别，没有运行安装器。
 
@@ -207,7 +287,9 @@ ctest --test-dir build/mingw --output-on-failure
 
 ```powershell
 .\build\mingw\Mixvera.exe --no-restore --lang zh_CN --theme charcoal --show-mixer --screenshot docs\demo\shot.png --screenshot-delay 2800
-.\build\mingw\Mixvera.exe --no-restore --lang zh_CN --settings-screenshot docs\demo\settings.png --settings-page 0
+.\build\mingw\Mixvera.exe --no-restore --lang zh_CN --canvas 1080x1920 --screenshot docs\demo\shot-portrait.png --screenshot-delay 2800
+.\build\mingw\Mixvera.exe --no-restore --lang zh_CN --mode portrait --project docs\demo\title-package-portrait.mixvera.json --screenshot docs\demo\shot-package.png --screenshot-delay 2800
+.\build\mingw\Mixvera.exe --no-restore --lang zh_CN --settings-screenshot docs\demo\settings.png --settings-page 1
 ```
 
 打包成可脱离 Qt 环境运行：
@@ -233,7 +315,7 @@ cmake --build build\mingw
 
 ## 工程文件
 
-工程是纯 JSON（`core/project.cpp` 定义 schema）：画布尺寸与帧率、全部输入及其采集参数、场景图层几何、PGM/PVW、转场设置、四路叠加层、输出配置。`File → Open Project…` 可打开任意工程，`--project` 参数可在启动时载入。
+工程是纯 JSON（`core/project.cpp` 定义 schema）：画布尺寸与帧率（可为竖屏 / 方形）、全部输入及其采集参数（含抠像）、标题样式与包装路径、包装元素覆盖（`titleText:` / `titleColor:` / `titleImage:`）、命名标题预置、场景图层几何、PGM/PVW、转场设置、四路叠加层、输出配置。`File → Open Project…` 可打开任意工程，`--project` 参数可在启动时载入。
 
 ## 测试
 
@@ -243,8 +325,8 @@ cmake --build build\mingw
 | --- | --- |
 | `mixvera_core_tests` | 切换与 T-Bar 释放逻辑 |
 | `mixvera_project_tests` | 工程 JSON 往返、默认工程合法性、图层几何、Fly/Cube 转场键、叠加层往返与失效输入清理 |
-| `mixvera_ui_smoke_tests` | 真实界面：默认工程、CUT/AUTO/T-Bar、监视器出帧、场景选择不递归、叠加层按钮开关、快照落盘、界面录制落盘、三套主题样式表完整且应用到主窗口 |
-| `mixvera_media_tests` | 屏幕采集出帧、窗口枚举、采集画面合成非黑、四种标题样式出帧、倒计时/比分详情、叠加层像素合成、Fly/Cube 转场渲染、ffmpeg 录制文件可生成 |
+| `mixvera_ui_smoke_tests` | 真实界面：默认工程、CUT/AUTO/T-Bar、监视器出帧、场景选择不递归、叠加层按钮开关、快照落盘、竖屏画布切换、字幕逐句切换、抠像参数往返、标题预置保存/切换/删除、界面录制落盘、三套主题样式表完整且应用到主窗口 |
+| `mixvera_media_tests` | 屏幕采集出帧、窗口枚举、采集画面合成非黑、六种内置标题样式出帧、竖屏字幕尺寸、倒计时/比分详情、绿幕与蓝幕抠像、抠像合成到底层场景、叠加层像素合成、Fly/Cube 转场渲染、GT 包装出帧与 .NET 时钟格式、二维码结构、DataChangeIn 动画、文本更新保留动画时钟、ffmpeg 录制文件可生成 |
 
 ## 当前边界
 
@@ -252,6 +334,11 @@ cmake --build build\mingw
 - 未接入 SDI / DeckLink / NDI 采集；相应输入类型在领域模型里预留但未实现
 - 场景图层目前按「整幅」放置，裁剪、缩放、拖拽定位的编辑器还没做
 - 叠加层为全画布覆盖；逐层位置 / 缩放调整尚未提供（需要时把内容排进场景再作叠加输入）
+- 抠像是整幅色度键控：没有 SinSam 的区域遮罩、遮罩形状或 AI 抠像；光线复杂或半透明物体需要调相似度 / 平滑度 / 溢色
+- 标题包装读取 GT 文档的常用子集：支持上表元素、画笔、Storyboard 与 Ticker；不渲染 GT 的 `Effect`（模糊 / 阴影）、`DataFlags` 数据绑定，也不读取 `.pag` 特效字幕、`.mov` 透明动画与在线标题；`.gtzip` 只支持 stored / deflated，加密或 Zip64 包会被拒绝
+- 包装是只读渲染：Mixvera 不写回 `.gtzip`，也不是 GT 设计器；需要新布局时在 vMix / GT Designer 里编辑，或改用内置样式
+- 字幕与包装的文本覆盖保存在工程 JSON；`.sinsamtitle` 按散装 GT 文档读取，`.pag` / `.vzae` 不支持
+- 竖屏只改变画布方向，工作区仍是横向双监视器；不做 SinSam 的「切换界面模式 / 切换界面布局」
 - RTMP 推流需要外部地址；推流与录制共用一条 ffmpeg 原始帧管道
 - 依赖外部 `ffmpeg.exe`，仓库不内嵌二进制
 

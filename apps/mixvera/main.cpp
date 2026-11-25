@@ -12,7 +12,9 @@
 #include <QLocale>
 #include <QPushButton>
 #include <QSettings>
+#include <QSize>
 #include <QSlider>
+#include <QStringList>
 #include <QSurfaceFormat>
 #include <QTextStream>
 #include <QTimer>
@@ -70,7 +72,7 @@ int main(int argc, char** argv)
 {
     QApplication qt(argc, argv);
     QCoreApplication::setApplicationName("Mixvera");
-    QCoreApplication::setApplicationVersion("0.5.0");
+    QCoreApplication::setApplicationVersion("0.6.0");
     QCoreApplication::setOrganizationName("Mixvera");
 
     QString screenshotPath;
@@ -80,6 +82,8 @@ int main(int argc, char** argv)
     QString projectFilePath;
     QString languageOverride;
     QString themeOverride;
+    QSize canvasOverride;
+    QString modeOverride;
     int screenshotDelayMs = 1500;
     bool restoreSession = QSettings().value("ui/restoreSession", true).toBool();
     bool showMixer = false;
@@ -102,6 +106,22 @@ int main(int argc, char** argv)
             languageOverride = arguments[++index];
         } else if (arguments[index] == "--theme" && index + 1 < arguments.size()) {
             themeOverride = arguments[++index];
+        } else if (arguments[index] == "--mode" && index + 1 < arguments.size()) {
+            const QString value = arguments[++index].toLower();
+            if (value == "landscape" || value == "portrait") {
+                modeOverride = value;
+            }
+        } else if (arguments[index] == "--canvas" && index + 1 < arguments.size()) {
+            const QStringList parts = arguments[++index].toLower().split(QLatin1Char('x'));
+            bool widthOk = false;
+            bool heightOk = false;
+            if (parts.size() == 2) {
+                const int width = parts[0].toInt(&widthOk);
+                const int height = parts[1].toInt(&heightOk);
+                if (widthOk && heightOk && width > 0 && height > 0) {
+                    canvasOverride = QSize(width, height);
+                }
+            }
         } else if (arguments[index] == "--show-mixer") {
             showMixer = true;
         } else if (arguments[index] == "--no-restore") {
@@ -152,6 +172,11 @@ int main(int argc, char** argv)
     if (!projectFilePath.isEmpty() && !window.loadProject(projectFilePath)) {
         std::cerr << "Failed to load project: " << projectFilePath.toStdString() << "\n";
     }
+    if (canvasOverride.isValid() && !canvasOverride.isEmpty()) {
+        window.setCanvasSize(canvasOverride.width(), canvasOverride.height(), false);
+    } else if (!modeOverride.isEmpty()) {
+        window.setCanvasMode(modeOverride == "portrait", false);
+    }
     if (showMixer) {
         window.setMixerVisible(true);
     }
@@ -163,6 +188,9 @@ int main(int argc, char** argv)
         dialog->setLanguage(language.startsWith("zh", Qt::CaseInsensitive)
                 ? QStringLiteral("zh_CN")
                 : QStringLiteral("en"));
+        const QSize settingsCanvas = window.canvasSize();
+        dialog->setValues(settingsCanvas.width(), settingsCanvas.height(), 30,
+            QStringLiteral("recordings"), QString(), QString());
         if (auto* nav = dialog->findChild<QListWidget*>("settingsNav")) {
             if (settingsPage >= 0 && settingsPage < nav->count()) {
                 nav->setCurrentRow(settingsPage);

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Composition Width="1920" Height="1080">
+  <Layer Name="Main" Location="0,0">
+    <Layer.Composition>
+      <Composition Width="1920" Height="1080">
+        <Rectangle Name="Panel" Dimensions="1000,200,0" Location="80,760" Radius="28">
+          <Rectangle.Fill>
+            <Brush Color="#E6121826" />
+          </Rectangle.Fill>
+          <Rectangle.Stroke Thickness="3">
+            <Brush Color="#FFFF8A3D" />
+          </Rectangle.Stroke>
+        </Rectangle>
+        <Rectangle Name="Accent" Dimensions="14,200,0" Location="80,760" Radius="7">
+          <Rectangle.Fill>
+            <Brush Color="#FFFF8A3D" />
+          </Rectangle.Fill>
+        </Rectangle>
+        <Rectangle Name="Badge" Dimensions="120,40,0" Location="120,785" Radius="20">
+          <Rectangle.Fill>
+            <Brush Color="#FFFF3B30" />
+          </Rectangle.Fill>
+        </Rectangle>
+        <TextBlock Name="Badge Text" Dimensions="120,40,0" Location="120,785" Text="LIVE" FontFamily="Arial" FontSize="22" FontWeight="Bold" TextAlign="Center" VerticalAlign="Center">
+          <TextBlock.Fill>
+            <Brush Color="#FFFFFFFF" />
+          </TextBlock.Fill>
+        </TextBlock>
+        <TextBlock Name="Headline" Dimensions="760,70,0" Location="260,785" Text="MIXVERA LIVE" FontFamily="Arial" FontSize="52" FontWeight="Bold">
+          <TextBlock.Fill>
+            <Brush Color="#FFFFFFFF" />
+          </TextBlock.Fill>
+        </TextBlock>
+        <TextBlock Name="Description" Dimensions="520,50,0" Location="260,860" Text="Landscape title package" FontFamily="Arial" FontSize="28">
+          <TextBlock.Fill>
+            <Brush Color="#FF9FB0C4" />
+          </TextBlock.Fill>
+        </TextBlock>
+        <TextBlock Name="Clock" Dimensions="240,50,0" Location="780,860" Text="{0:HH:mm:ss}" FontFamily="Arial" FontSize="30" TextAlign="Right">
+          <TextBlock.Fill>
+            <Brush Color="#FFFF8A3D" />
+          </TextBlock.Fill>
+        </TextBlock>
+        <Ticker Name="Ticker" Dimensions="1920,64,0" Location="0,1000" FontSize="30" Speed="4">
+          <Ticker.Fill>
+            <Brush Color="#E6121826" />
+          </Ticker.Fill>
+          <Ticker.Template>
+            <TextBlock Text="MIXVERA 标题包装  ·  可编辑文本、颜色与图片  ·  比分与倒计时" />
+          </Ticker.Template>
+        </Ticker>
+      </Composition>
+    </Layer.Composition>
+  </Layer>
+  <Storyboard>
+    <Storyboard.Animations>
+      <Fade Object="Panel" Duration="0.4" />
+      <Fade Object="Accent" Duration="0.4" />
+      <Fly Object="Headline" Direction="Left" Duration="0.5" Delay="0.1" />
+      <Fade Object="Description" Duration="0.4" Delay="0.2" />
+      <Fade Object="Clock" Duration="0.4" Delay="0.3" />
+      <Fade Object="Ticker" Duration="0.4" Delay="0.4" />
+    </Storyboard.Animations>
+  </Storyboard>
+</Composition>

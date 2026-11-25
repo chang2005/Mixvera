@@ -1,5 +1,7 @@
 #include "mixvera/ui/media/compositor.hpp"
 
+#include "mixvera/ui/media/chroma_key.hpp"
+
 #include <QLinearGradient>
 #include <QPainter>
 #include <QTransform>
@@ -12,10 +14,23 @@ namespace {
 
 constexpr qreal kPi = 3.14159265358979323846;
 
+/// Chroma parameters are applied to the frame after the provider produces it,
+/// so tuning them must not tear down and reopen a camera or capture device.
+std::map<std::string, std::string> providerParams(const core::InputDescriptor& input)
+{
+    std::map<std::string, std::string> params;
+    for (const auto& [key, value] : input.params) {
+        if (key.compare(0, 6, "chroma") != 0) {
+            params[key] = value;
+        }
+    }
+    return params;
+}
+
 bool sameSettings(const core::InputDescriptor& left, const core::InputDescriptor& right)
 {
-    return left.kind == right.kind && left.params == right.params
-        && left.name == right.name;
+    return left.kind == right.kind && left.name == right.name
+        && providerParams(left) == providerParams(right);
 }
 
 /// Draws a whole-canvas image as a flying card: scaled and rotated about its
@@ -49,6 +64,11 @@ void Compositor::setCanvasSize(QSize size)
         return;
     }
     canvas_ = size;
+    for (auto& [id, entry] : entries_) {
+        if (entry.provider) {
+            entry.provider->setCanvasSize(canvas_);
+        }
+    }
 }
 
 void Compositor::setFrameRate(int fps)
@@ -69,11 +89,18 @@ void Compositor::sync(const std::vector<core::InputDescriptor>& inputs)
             it->second.descriptor = input;
             continue;
         }
+        if (it != entries_.end() && it->second.provider
+            && it->second.descriptor.kind == input.kind
+            && it->second.provider->update(input)) {
+            it->second.descriptor = input;
+            continue;
+        }
 
         auto provider = createSourceProvider(input);
         if (!provider) {
             continue;
         }
+        provider->setCanvasSize(canvas_);
         Entry entry;
         entry.descriptor = input;
         entry.provider = std::move(provider);
@@ -98,7 +125,13 @@ void Compositor::refresh(const std::vector<core::InputDescriptor>& inputs)
             continue;
         }
         const QImage frame = entry.provider->frame();
-        if (!frame.isNull()) {
+        if (frame.isNull()) {
+            continue;
+        }
+        const ChromaKeySettings chroma = chromaKeySettings(entry.descriptor);
+        if (chroma.enabled && inputSupportsChromaKey(entry.descriptor.kind)) {
+            frames_[id] = applyChromaKey(frame, chroma);
+        } else {
             frames_[id] = frame;
         }
     }
@@ -383,7 +416,12 @@ QString Compositor::detail(const std::string& id) const
     if (it == entries_.end() || !it->second.provider) {
         return QString();
     }
-    return it->second.provider->detail();
+    QString detail = it->second.provider->detail();
+    const ChromaKeySettings chroma = chromaKeySettings(it->second.descriptor);
+    if (chroma.enabled && inputSupportsChromaKey(it->second.descriptor.kind)) {
+        detail += QStringLiteral(" · Chroma: %1").arg(chromaKeyLabel(chroma));
+    }
+    return detail;
 }
 
 } // namespace mixvera::ui

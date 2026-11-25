@@ -59,6 +59,8 @@ private:
 
     void selectTheme(theme::ThemeId id, bool notify);
     void updateAspectLabel();
+    void syncModeFromSize();
+    void syncPresetFromSize();
 
     theme::ThemeId theme_ = theme::ThemeId::Charcoal;
     std::vector<std::pair<theme::ThemeId, QFrame*>> themeCards_;
@@ -66,6 +68,7 @@ private:
     QListWidget* nav_ = nullptr;
     QStackedWidget* pages_ = nullptr;
 
+    QComboBox* mode_ = nullptr;
     QComboBox* preset_ = nullptr;
     QSpinBox* width_ = nullptr;
     QSpinBox* height_ = nullptr;

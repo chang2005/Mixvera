@@ -4,6 +4,7 @@
 
 #include <QImage>
 #include <QObject>
+#include <QSize>
 #include <QString>
 
 #include <memory>
@@ -21,6 +22,19 @@ public:
 
     /// Short human readable state, shown in the input list tooltip.
     virtual QString detail() const { return QString(); }
+
+    /// Lets canvas-sized generators (titles) follow portrait or square shows.
+    /// Capture and file providers keep their native frame size.
+    virtual void setCanvasSize(QSize size) { Q_UNUSED(size); }
+
+    /// Applies changed input settings without rebuilding the provider, so
+    /// title animations, tickers and cached package assets keep running.
+    /// Returns false when the change needs a fresh provider.
+    virtual bool update(const core::InputDescriptor& input)
+    {
+        Q_UNUSED(input);
+        return false;
+    }
 
     virtual bool ready() const { return true; }
 };

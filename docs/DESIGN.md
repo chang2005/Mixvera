@@ -1,6 +1,6 @@
-# Mixvera 设计说明（0.5）
+# Mixvera 设计说明（0.6）
 
-这份文档说明 0.5 的界面、主题、调音台与设置界面的设计依据和实现约定，以及 0.5 新增的叠加层、转场与标题功能。配色与控件语义的取证过程见 [UI-SPEC.md](UI-SPEC.md)，三份原程序（OBS、vMix、SinSam）的观察记录见 [RE-PROJECTS.md](RE-PROJECTS.md) 与 [RE-SINSAM.md](RE-SINSAM.md)。
+这份文档说明 0.6 的界面、主题、调音台与设置界面的设计依据和实现约定，以及 0.5–0.6 新增的叠加层、转场、标题、竖屏画布、抠像、字幕、GT 标题包装与显示模式。配色与控件语义的取证过程见 [UI-SPEC.md](UI-SPEC.md)，三份原程序（OBS、vMix、SinSam）与 vMix GT 模板库的观察记录见 [RE-PROJECTS.md](RE-PROJECTS.md) 与 [RE-SINSAM.md](RE-SINSAM.md)。
 
 原则只有一句：**借鉴公开可观察的组织方式与颜色值，不复制任何专有代码、图标、字体或资源。**
 
@@ -68,7 +68,7 @@ Yami 的 `#13141A`、`#1D1F26`、`#272A33`、`#284CB8`、`#C01C37`、`#37D247`�
 | 顶栏 | 高 52 | 品牌、工程名、面板开关（场景/调音台）、设置、全屏、REC / STREAM 胶囊 |
 | 场景 / 来源栏 | 宽 220–320，可收起 | OBS 式场景列表 + 图层列表（显隐、上移/下移、移除） |
 | 预览监视器 | 弹性 | 橙色标题条 `PREVIEW` |
-| 转场列 | 固定 156 | 硬切 / 自动 / 四种转场 / FTB / T-BAR / 时长 |
+| 转场列 | 固定 156 | 硬切 / 自动 / 六种转场 / FTB / T-BAR / 时长 |
 | 节目监视器 | 弹性 | 绿色标题条 `PROGRAM` |
 | 调音台 | 宽 280–520，可收起 | 见下一节 |
 | 输入条 | 固定高 212 | 横向滚动缩略图、编号、名称、PGM/PVW、分类筛选与搜索 |
@@ -103,7 +103,7 @@ Yami 的 `#13141A`、`#1D1F26`、`#272A33`、`#284CB8`、`#C01C37`、`#37D247`�
 | 页 | 内容 |
 | --- | --- |
 | 常规 | 主题卡片 ×3（含实时缩略图与说明）、跟随系统语言 / 简体中文 / English、启动时恢复上次会话 |
-| 视频 | 画布预设、宽×高、帧率、宽高比；说明画布尺寸决定合成与录制分辨率 |
+| 视频 | 显示模式（横屏 / 竖屏）、画布预设、宽×高、帧率、宽高比；说明画布尺寸决定合成与录制分辨率 |
 | 音频 | 输入设备、采样格式、监听说明与当前限制 |
 | 输出 | 录制目录（绝对路径）、ffmpeg 可用性、RTMP 服务器与串流密钥 |
 | 快捷键 | 键盘与鼠标操作对照（`shortcutKey` 键帽样式） |
@@ -120,7 +120,7 @@ Yami 的 `#13141A`、`#1D1F26`、`#272A33`、`#284CB8`、`#C01C37`、`#37D247`�
 
 - 所有 `tr()` 的 context 必须是 `mixvera::ui::类名`（Qt 运行期按命名空间+类查找）。
 - 主题名与描述位于 `theme.cpp`，不是 QObject，用带字面量的 `QCoreApplication::translate("Theme", "…")` 让 lupdate 能提取。
-- 文案 305 条，`.ts` 全部完成，`.qm` 经 `translations.qrc` 内嵌，发布时无需额外文件。
+- 文案 448 条，`.ts` 全部完成，`.qm` 经 `translations.qrc` 内嵌，发布时无需额外文件。
 - 术语沿用 OBS 中文语言包：硬切 / 淡入淡出 / 划像 / 推流 / 录制 / 调音台；不使用 vMix 机器翻译的「切 / 褪色 / 擦拭 / 流」。
 
 ## 截图与验收命令行
@@ -131,6 +131,8 @@ Yami 的 `#13141A`、`#1D1F26`、`#272A33`、`#284CB8`、`#C01C37`、`#37D247`�
 | --- | --- |
 | `--theme charcoal\|yami\|daylight` | 指定主题（等价 `MIXVERA_THEME`） |
 | `--lang zh_CN\|en` | 指定语言（等价 `MIXVERA_LANG`） |
+| `--canvas WxH` | 启动时覆盖画布尺寸（如 `1080x1920`） |
+| `--mode landscape\|portrait` | 启动时切换画布方向（保留长短边） |
 | `--show-mixer` | 启动即展开调音台 |
 | `--no-restore` | 忽略上次会话，使用默认工程 |
 | `--screenshot <path>` | 延时后保存主窗口截图并退出 |
@@ -169,11 +171,80 @@ Yami 的 `#13141A`、`#1D1F26`、`#272A33`、`#284CB8`、`#C01C37`、`#37D247`�
 
 叠加层像素流程刻意保持简单：预览与节目先各自 `renderInput`，转场混合后按 1→4 的顺序把每层以 `drawCover` 铺满画布，最后 FTB。录制与推流收到的就是这条链路的输出。
 
+## 0.6 增量：竖屏画布、抠像与字幕（SinSam 观察）
+
+0.6 的范围同样来自 [RE-SINSAM.md](RE-SINSAM.md)。三项能力都接在已有管线上，没有引入新窗口、新依赖或专有格式。
+
+### 画布方向
+
+- `Project::canvas` 是唯一尺寸来源；`MainWindow::setCanvasSize(width, height, persist)` 负责钳制（宽 320–7680、高 180–4320）、写回工程、通知 `Compositor`、刷新监视器，并按需保存。
+- `Compositor::sync()` 在输入变化时通过 `SourceProvider::setCanvasSize(QSize)` 把画布尺寸下发给每个 provider；标题据此计算 `unit = 画布宽 / 1280`，字体、内边距、卡片与滚动速度都随画布缩放。
+- 「视图 → 竖屏画布」不写死 1080×1920，而是交换当前工程的长短边，因此 720p 工程会得到 720×1280；再次选择恢复横屏。
+- 录制、推流与快照直接消费合成器输出，画布一变，输出尺寸随之变化。`SettingsDialog` 的视频页与 `--canvas` 是两个入口；`--canvas` 只在本次运行覆盖，不主动保存，但退出时的会话保存仍会把当前画布写入 `project.json`。
+
+### 蓝 / 绿幕抠像
+
+参数存放在 `InputDescriptor::params`，随工程序列化：
+
+| 参数 | 含义 | 默认 |
+| --- | --- | --- |
+| `chromaEnabled` | 是否开启 | 关 |
+| `chromaColor` | 键色，预设绿 `#00ff00` / 蓝 `#0000ff`，也可任意 | 绿 |
+| `chromaSimilarity` | 键色容差，0–100 | 35 |
+| `chromaSmoothness` | 边缘羽化，0–100 | 18 |
+| `chromaSpill` | 溢色抑制，0–100 | 60 |
+
+- 支持屏幕、窗口、摄像头、图片、视频五类输入；标题、纯色、测试图案与场景不显示抠像入口。
+- `Compositor::refresh()` 在缓存帧之后调用 `applyChromaKey()`。算法比较归一化 RGB 色度而不是原始 Cb/Cr：暗部绿幕与亮部色度相同，褶皱和阴影能一起键掉。
+  - `threshold = 0.03 + similarity × 0.0055`；距离不超过阈值的像素 alpha 归零。
+  - `feather = 0.004 + smoothness × 0.0022`；阈值与阈值 + 羽化之间用 smoothstep 过渡。
+  - 绿键 / 蓝键时按 `spill` 把主通道压向另外两个通道的最大值，去掉头发与肩部溢色。
+- 输出为预乘 ARGB，场景、叠加层与转场仍然可以直接用 `QPainter` 合成。
+- `Compositor::providerParams()` 剔除 `chroma*` 键：调参数不会重建摄像头或采集 provider，画面不闪断。
+
+### 字幕条与滚动字幕
+
+`TitleProvider` 的样式扩展为 `caption` 与 `ticker`：
+
+- **字幕条**：底部安全区（距底 `max(36 × unit, 画布高 4.5%)`）的全宽半透明底板，居中自动换行白字，底板下缘一条强调色线；文字为空时不绘制。
+- **滚动字幕**：底部条高 `84 × unit`，文字优先取 `text`，为空时取当前预置句；从右缘进入、按 `tickerSpeed` 像素/秒左移，用 `fmod` 实现无缝循环，条顶一条强调色线。
+- `captions` 存多行预置文案，`captionIndex` 指向当前行，`text` 是实际渲染文本。输入条右键「下一句 / 上一句」按行数取模并同时写回 `captionIndex` 与 `text`；「设置字幕文字…」直接改 `text`，`captionClear` 清空。
+- 样式、文案、当前行与滚动速度都随工程保存；竖屏下字幕按画布宽度换行，不再被横向工作区裁切。
+
+## 0.6 增量（续）：GT 标题包装与显示模式
+
+0.6 的界面入口只有三处新增：「添加输入」的「标题包装」样式与元素编辑器、输入条右键的标题预置菜单，以及设置 → 视频的「显示模式」。其余变化都在渲染层。
+
+### 显示模式
+
+- 设置 → 视频的画布卡片第一行是 `Display mode`（对象名 `canvasMode`，取值 `landscape` / `portrait`），下面是预设、分辨率与帧率。
+- 三个控件互相约束：选竖屏预设会把模式切到竖屏；手改宽高时按 `height > width` 回写模式；方形画布没有方向，切换模式时按 16:9 展开另一条边（1080×1080 → 竖屏 1080×1920，或横屏 1920×1080）。
+- 主窗口「视图」菜单提供互斥的「横屏模式 / 竖屏模式」动作（`landscapeAction` / `portraitAction`），与设置、`--mode` 写的是同一份 `Project::canvas`。
+- `--mode landscape|portrait` 只覆盖本次运行的画布，不写 QSettings；退出会话保存仍会记录当前画布，与 `--canvas` 一致。
+
+### 标题包装
+
+`TitlePackage` 是只读模型：`load()` 解析一次，`render(canvas, …)` 按任意画布逐帧栅格化。
+
+- **格式**：`.gtzip`（zip 内 `document.xml` + `resources.xml`）用内置只读 ZIP 读取器打开（stored / deflated，拒绝加密、Zip64，单个包上限 64 MB / 2048 项）；`.xaml` / `.sinsamtitle` 与未压缩目录直接读 `document.xml`，图片相对文档目录解析。UTF-8 BOM 与 XML 声明不一致时仍按 UTF-8 解析。
+- **缩放**：先 `contain` 到画布，再对 GT Vertical 的 3412×1920 艺术板按高度适配并居中——竖屏 1080×1920 下正好取中间 1080 宽的区域。
+- **元素**：容器 `Composition` / `Layer` 递归绘制；`Rectangle`（圆角 / 描边）、`Ellipse`、`Triangle`、`RightTriangle`、`TextBlock`、`Image`、`Ticker`、`QRCode`。容器与叶子都应用 `Opacity`、`Visible`、`Transform Rotate` 与动画状态。
+- **画笔**：`Brush Type` 为空时按子节点推断（`Bitmap` 子节点 → 位图，`Stops` / `StartPoint` → 线性渐变）；缺 `Color` 视为透明；色标按 `Position` 稳定排序。
+- **动画**：`Storyboard` 按 `Type` 分成入口（空）、`TransitionOut`、`DataChangeIn`、`DataChangeOut`；缺省 `Duration` 0.5 s。`animationFor()` 把 Fade / Fly / Reveal / Expand / ZoomFade / Zoom / Bounce / Rotate 折算为 `AnimationState{opacity, offset, scale, rotation, reveal, revealDirection, scaleAnchor}`，由 `drawNode` 统一应用。
+- **时钟**：`titlePackageClockText()` 求值 `{0:...}`；`ClockParts` 解析 .NET 自定义格式（大小写 `H/h`、`m`、`s`、`f/F`、`t/tt`、`d/M/y`、引号 / 转义 / `%`）；倒计时取 `|` 后段，`tt` 为空时去掉前面的空格。
+- **二维码**：`qr_encoder.cpp` 独立实现字节模式编码（ECC M、版本 1–10、RS 纠错、格式/版本 BCH、8 种掩码惩罚选择）；渲染 4 模块静区与黑色模块，空内容画红色占位。
+- **预置**：输入参数 `titlePreset:<n>:label` 与 `titlePreset:<n>:<fullKey>` 快照全部 `titleText:` / `titleColor:` / `titleImage:`；「下一个 / 上一个」按已有槽位循环，应用前先擦除当前元素覆盖，再写入预置，并记录 `titlePresetChanged`。provider 用该时间戳选择 `DataChangeIn` 并计算 `dataChangeSeconds`。
+- **原地更新**：`TitleProvider::update()` 拒绝样式与包装路径变化；其余参数重放后仍保留 `packageClock_`、`tickerClock_` 与 `presetChangedMs_`。`Compositor::sync()` 因此可以在文本 / 颜色 / 图片 / 预置变化时跳过重建，滚动字幕与入场动画不回到起点。
+
 ## 边界
 
 - 调音台不做音频路由与混音总线；solo 只是监听状态，不改变输出。
 - 没有为高 DPI 单独提供图标位图；SVG 图标由 Qt 缩放。
 - Daylight 主题下监视器仍为近黑底，这是刻意的：节目画面不应因为界面主题变亮而失真。
 - 叠加层是全画布 `drawCover`，不做逐层位置/缩放调整；需要布局时把内容放进场景再作为叠加输入。
-- 倒计时走真实时钟（`countdownEnd` 时间戳），暂停/恢复会换算剩余毫秒；`.gtzip` 设计器格式不读取也不兼容。
+- 倒计时走真实时钟（`countdownEnd` 时间戳），暂停/恢复会换算剩余毫秒；GT 包装的倒计时字段使用 `|` 后的格式段。
+- 抠像是整幅色度键控，不做 SinSam 的区域抠图、遮罩形状（圆形 / 矩形 / 爱心等）或 AI 抠像；光线复杂时靠相似度 / 平滑度 / 溢色三个参数手动调。
+- 标题包装只读：支持 GT 文档的常用子集（元素、画笔、Storyboard、Ticker、时钟、QR），不渲染 `Effect`（模糊 / 阴影）、`DataFlags` 数据绑定，也不读取 `.pag` / `.vzae` 特效字幕、`.mov` 透明动画或在线标题；Mixvera 不是 GT 设计器，不写回 `.gtzip`。
+- 包装文本按 Qt 字体度量排版；GT 模板引用的字体缺失时回退到系统字体链，换行与字距可能与 vMix / WPF 略有差异。
+- 竖屏只改变画布方向，工作区仍是横向双监视器；SinSam 的「切换界面模式 / 切换界面布局」与「专业模式 / 电商模式」不移植。
 - 不复制 OBS / vMix / SinSam 的 QSS 全文、图标、字体、语言包文本、窗体坐标或标题模板。

@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.6.0] — 2026-11-25
+
+把芯象（SinSam）26.7.10.3 的**竖屏 / 显示模式、蓝绿幕抠像与字幕叠加**，以及 vMix GT / SinSam 的**标题包装**移植到 Mixvera。0.5 的叠加层、转场与标题全部沿用；取证与兼容矩阵见 `docs/RE-SINSAM.md`。
+
+### 新增
+
+- **竖屏 / 方形画布**：设置 → 视频新增 `1080 × 1920`（Portrait FHD）、`720 × 1280`（Portrait HD）、`1080 × 1080`（Square）预设；`--canvas WxH` 启动参数；画布尺寸同步到合成器与所有标题渲染，录制、推流与快照使用同一尺寸
+- **显示模式**：设置 → 视频的画布卡片新增「显示模式」下拉（横屏 / 竖屏），与预设、宽高、像素比联动——方形画布切换模式时自动展开为 16:9；「视图 → 横屏模式 / 竖屏模式」互斥切换，`--mode landscape|portrait` 可在启动时指定
+- **蓝 / 绿幕抠像**：输入级实时色度键控，颜色支持绿幕、蓝幕与任意自定义色，参数为相似度 / 平滑度 / 溢色抑制；添加输入对话框新增「CHROMA KEY」面板，输入条右键「抠像」可快速切换关 / 绿幕 / 蓝幕；设置随工程保存
+- **抠像管线**：在每一帧采集之后、进入场景合成之前完成，输出预乘 ARGB；叠加层、转场、录制、推流与快照都得到抠像后的画面
+- **字幕条样式**：标题新增「字幕条」——底部安全区半透明底板、居中自动换行文字、强调色下划线，竖屏画布下按宽度缩放并贴底
+- **滚动字幕样式**：底部滚动条，文字从右向左无缝循环，速度 20–800 px/s 可调
+- **字幕文案切换**：字幕 / 滚动字幕输入可存多行预置文案，输入条右键「设置字幕文字…」「下一句」「上一句」「清除字幕」实时切换
+- **画布感知标题**：`SourceProvider::setCanvasSize(QSize)` 把画布尺寸下发给全部标题，字体、边距、卡片与滚动速度按画布宽度缩放
+- **标题包装**：添加输入 → 标题新增第七种样式「标题包装」。可读取 vMix / SinSam 的 `.gtzip`（zip 内 `document.xml` + `resources.xml`）、未压缩的包装目录，以及散装 `.xaml` / `.sinsamtitle` 文档；UTF-8 BOM 与声明不一致、缺省 `Color`、缺省 `Duration` 等真实模板写法都能容忍
+- **元素渲染**：`Composition` / `Layer` / `Rectangle` / `Ellipse` / `Triangle` / `RightTriangle` / `TextBlock` / `Image` / `Ticker` / `QRCode`；画笔支持 `Solid` / `LinearGradient` / `RadialGradient` / `Transparent` / `Bitmap`，渐变按 `StartPoint` / `EndPoint` 与色标位置绘制，缺省颜色按透明处理
+- **GT 几何**：`Dimensions` / `Location` / 圆角 / 描边 / `Opacity` / `Visible`；`Transform Rotate="x,y,z"` 取 z 分量（弧度，>6.5 视为角度）；图片 `Stretch` / `SizeMode="Stretch"` 映射为铺满，其余按等比适配
+- **Storyboard 动画**：入口（`Type=""`）、`TransitionOut`、`DataChangeIn` / `DataChangeOut`；动画类型 Fade / Fly / Reveal / Expand / ZoomFade / Zoom / Bounce / Rotate（90°），支持 Direction（四方向与四角）、Delay、Duration（缺省 0.5 s）、Reverse 与 cubic / linear 缓动；容器与叶子都参与透明度、位移、缩放、旋转与揭示裁切
+- **Ticker 滚动字幕**：递归读取模板中最宽的 TextBlock 作为滚动文本；Direction 为 top / bottom / up / down / vertical 时整条旋转 −90° 沿竖条滚动，其余按水平左右滚动
+- **时钟与倒计时**：`{0:...}` 字段支持 .NET 自定义格式子集（`H/h`、`m`、`s`、`f/F`、`t/tt`、`d/M/y`、引号 / 转义字面量与 `%`）；倒计时取 `|` 后的格式段（如 `{0:4:00PM|mm:ss}`），`tt` 为空时不再留下尾随空格
+- **二维码**：`QRCode` 使用真实 ISO/IEC 18004 字节模式编码（纠错等级 M、版本 1–10、Reed–Solomon、格式 / 版本 BCH、8 种掩码惩罚选择、4 模块静区）；空内容绘制红色 `QR` 占位
+- **竖屏包装**：GT Vertical 的 3412×1920 艺术板按高度缩放并居中裁切到竖屏画布，1080×1920 包装按宽度适配
+- **标题元素编辑**：添加输入对话框「Elements…」打开 `TitleElementDialog`，列出包装中的文本 / 图片 / 颜色元素并逐项覆盖；覆盖写入 `titleText:<元素>` / `titleColor:<元素>` / `titleImage:<元素>`，随工程保存
+- **命名标题预置**：每个包装可存 10 组命名快照（文本、颜色、图片全覆盖）；输入条右键「保存标题预置…」「上一个 / 下一个标题预置」「删除标题预置」，切换时写入 `titlePresetChanged` 时间戳并播放包装的 `DataChangeIn` 动画
+- **原地更新**：`TitleProvider::update()` 在文本、颜色、图片、预置变化时保留入场动画、滚动字幕与包装时钟；只有样式或包装文件变化才重建 provider
+- **演示素材与截图**：`docs/demo/studio-background*.png`、`docs/demo/chroma-presenter*.png`（自绘素材）；`title-package-landscape.xaml`、`title-package-portrait.xaml` 及同名 `.mixvera.json`；截图 `mixvera-0.6-zh-portrait-chroma.png`（1080×1920 中文竖屏、绿幕抠像 + 字幕条）、`mixvera-0.6-en-blue-ticker.png`（1920×1080 英文、蓝幕抠像 + 滚动字幕）、`mixvera-0.6-landscape-package.png`、`mixvera-0.6-portrait-package.png`（1080×1920 竖屏包装）与 `mixvera-0.6-settings-display-zh.png`
+- 文档：更新 `README.md`、`docs/DESIGN.md`（0.6 增量）、`docs/UI-SPEC.md`（SinSam / GT 对照）、`docs/RE-SINSAM.md`（0.6 证据与兼容矩阵）、`docs/ARCHITECTURE.md`
+
+### 变更
+
+- `Compositor::sync()` 把画布尺寸传给每个 provider；抠像参数（`chroma*`）不参与 provider 重建判定，调参时采集源不重启
+- `Compositor::refresh()` 对支持的输入统一应用抠像，`detail()` 追加键控信息
+- 标题样式由四种扩展为七种：全屏 / 下三分之一 / 倒计时 / 比分牌 / **字幕条** / **滚动字幕** / **标题包装**；包装样式下字幕行改称「字幕文案」，逐句操作改称「上一句字幕 / 下一句字幕 / 清除标题文字」
+- `SourceProvider::update()` 与 `Compositor::sync()`：文本、颜色、图片、预置变化时原地更新，成功时只替换 descriptor，不重启采集
+- `TitlePackage::render()` 增加 `dataChangeSeconds` 参数；新增公开助手 `titlePackageClockText()`，测试可用固定时间求值
+- 翻译规模 351 → 448 条，新增竖屏、显示模式、抠像、字幕、包装与预置文案，全部完成
+- 版本号升至 0.6.0；窗口标题与关于对话框更新
+
+### 测试
+
+- `mixvera_media_tests`：竖屏画布下字幕条与滚动字幕出帧且尺寸正确、绿幕与蓝幕抠像、抠像图像在场景中正确露出下层、六种内置标题样式与 GT 包装出帧、.NET 时钟格式（`HH:mm`、`hh:mm tt`、倒计时 `|` 段）、二维码结构（21×21 `vmix.com`、三个定位符、中文扩容、超长内容为空）、DataChangeIn 开场动画、文本更新保留动画时钟
+- `mixvera_ui_smoke_tests`：竖屏画布切换并回写工程、字幕「下一句 / 上一句」轮换、抠像参数经添加输入对话框往返、标题预置保存 / 上一个 / 下一个 / 删除的参数快照与清理
+- 四个测试目标全部通过（core / project / ui smoke / media）
+
 ## [0.5.0] — 2026-11-25
 
 把对 SinSam（芯象）26.7.10.3 安装包的只读逆向结果落地：四路下游叠加层、Fly / Cube 转场、标题预置（下三分之一 / 倒计时 / 比分牌）与快照。取证记录见 `docs/RE-SINSAM.md`。

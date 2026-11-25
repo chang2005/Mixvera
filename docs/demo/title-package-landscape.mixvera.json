@@ -1,0 +1,122 @@
+{
+  "canvas": {
+    "fps": 30,
+    "height": 1080,
+    "width": 1920
+  },
+  "inputs": [
+    {
+      "active": true,
+      "hasAudio": false,
+      "id": "image-1",
+      "items": [],
+      "kind": "image",
+      "muted": false,
+      "name": "Studio Background",
+      "params": {
+        "file": "docs/demo/studio-background-wide.png"
+      },
+      "volumeDb": 0.0
+    },
+    {
+      "active": true,
+      "hasAudio": false,
+      "id": "title-1",
+      "items": [],
+      "kind": "title",
+      "muted": false,
+      "name": "GT Lower Third",
+      "params": {
+        "package": "docs/demo/title-package-landscape.xaml",
+        "style": "package",
+        "subtitle": "",
+        "text": "",
+        "titleColor:Accent": "#FFFF8A3D",
+        "titleColor:Badge": "#FFFF3B30",
+        "titlePreset:0:label": "中文开场",
+        "titlePreset:0:titleColor:Accent": "#FFFF8A3D",
+        "titlePreset:0:titleText:Description": "GT title package · editable text, colour and images",
+        "titlePreset:0:titleText:Headline": "MIXVERA 0.6 LIVE",
+        "titlePreset:0:titleText:Ticker": "MIXVERA 标题包装  ·  可编辑文本、颜色与图片  ·  比分与倒计时",
+        "titlePreset:1:label": "English opener",
+        "titlePreset:1:titleColor:Accent": "#FF3B82F6",
+        "titlePreset:1:titleText:Description": "Landscape title package with presets and live clock",
+        "titlePreset:1:titleText:Headline": "MIXVERA 0.6 LIVE",
+        "titlePreset:1:titleText:Ticker": "MIXVERA title packaging  ·  editable text, colour and images  ·  score and countdown",
+        "titlePresetActive": "0",
+        "titleText:Badge Text": "LIVE",
+        "titleText:Clock": "{0:HH:mm:ss}",
+        "titleText:Description": "GT title package · editable text, colour and images",
+        "titleText:Headline": "MIXVERA 0.6 LIVE",
+        "titleText:Ticker": "MIXVERA 标题包装  ·  可编辑文本、颜色与图片  ·  比分与倒计时"
+      },
+      "volumeDb": 0.0
+    },
+    {
+      "active": true,
+      "hasAudio": false,
+      "id": "scene-1",
+      "items": [
+        {
+          "height": 1.0,
+          "input": "image-1",
+          "opacity": 1.0,
+          "visible": true,
+          "width": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "height": 1.0,
+          "input": "title-1",
+          "opacity": 1.0,
+          "visible": true,
+          "width": 1.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "kind": "scene",
+      "muted": false,
+      "name": "Program Scene",
+      "params": {},
+      "volumeDb": 0.0
+    }
+  ],
+  "name": "GT Title Package — Landscape",
+  "outputs": {
+    "recordingDirectory": "recordings",
+    "streamKey": "",
+    "streamUrl": ""
+  },
+  "overlays": [
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 1
+    },
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 2
+    },
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 3
+    },
+    {
+      "enabled": false,
+      "input": "",
+      "layer": 4
+    }
+  ],
+  "preview": "scene-1",
+  "program": "scene-1",
+  "schema": "mixvera.project",
+  "transition": {
+    "durationMs": 500,
+    "kind": "fade"
+  },
+  "version": 1
+}

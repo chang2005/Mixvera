@@ -1,16 +1,28 @@
 #include "mixvera/core/application.hpp"
 #include "mixvera/core/project.hpp"
+#include "mixvera/services/input_service.hpp"
 #include "mixvera/services/switcher_service.hpp"
+#include "mixvera/ui/add_input_dialog.hpp"
 #include "mixvera/ui/input_panel.hpp"
 #include "mixvera/ui/main_window.hpp"
 #include "mixvera/ui/media/recorder.hpp"
+#include "mixvera/ui/settings_dialog.hpp"
 #include "mixvera/ui/stage_view.hpp"
+#include "mixvera/ui/title_element_dialog.hpp"
+
+#include "../support/title_package_fixture.hpp"
 #include "mixvera/ui/theme.hpp"
 
+#include <QAction>
 #include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSlider>
 #include <QTemporaryDir>
@@ -29,6 +41,13 @@ private slots:
     void selectingASceneDoesNotLoop();
     void overlayButtonsToggle();
     void snapshotWritesPng();
+    void portraitCanvasSwitches();
+    void settingsExposeDisplayModes();
+    void titlePackageControlsRoundTrip();
+    void titleElementDialogEditsText();
+    void titlePresetsApplySnapshots();
+    void subtitleActionsStepPresets();
+    void chromaKeyRoundTripsThroughDialog();
     void recordsThroughTheUi();
     void themeStylesheetsAreComplete();
     void themeIsAppliedToMainWindow();
@@ -190,6 +209,267 @@ void UiSmokeTest::snapshotWritesPng()
     QVERIFY2(!files.isEmpty(), "Snapshot button did not write a PNG");
     const QFileInfo info(QDir(directory.path()).filePath(files.front()));
     QVERIFY(info.size() > 1024);
+}
+
+void UiSmokeTest::portraitCanvasSwitches()
+{
+    mixvera::ui::MainWindow window(false);
+    window.show();
+    QTest::qWait(150);
+
+    auto* action = window.findChild<QAction*>("portraitCanvasAction");
+    QVERIFY(action != nullptr);
+    QCOMPARE(window.canvasSize(), QSize(1920, 1080));
+    QVERIFY(!action->isChecked());
+
+    window.setCanvasSize(1080, 1920, false);
+    QCOMPARE(window.canvasSize(), QSize(1080, 1920));
+    QVERIFY(action->isChecked());
+
+    window.setCanvasSize(1920, 1080, false);
+    QCOMPARE(window.canvasSize(), QSize(1920, 1080));
+    QVERIFY(!action->isChecked());
+}
+
+void UiSmokeTest::settingsExposeDisplayModes()
+{
+    mixvera::ui::SettingsDialog dialog;
+    auto* mode = dialog.findChild<QComboBox*>("canvasMode");
+    QVERIFY(mode != nullptr);
+    QCOMPARE(mode->count(), 2);
+    QCOMPARE(mode->itemData(0).toString(), QStringLiteral("landscape"));
+    QCOMPARE(mode->itemData(1).toString(), QStringLiteral("portrait"));
+    QVERIFY(mode->itemText(0).contains(QStringLiteral("Landscape")));
+    QVERIFY(mode->itemText(1).contains(QStringLiteral("Portrait")));
+
+    dialog.setValues(1920, 1080, 60, {}, {}, {});
+    QCOMPARE(mode->currentData().toString(), QStringLiteral("landscape"));
+    dialog.setValues(1080, 1920, 60, {}, {}, {});
+    QCOMPARE(mode->currentData().toString(), QStringLiteral("portrait"));
+    QCOMPARE(dialog.canvasWidth(), 1080);
+    QCOMPARE(dialog.canvasHeight(), 1920);
+    dialog.setValues(1280, 720, 60, {}, {}, {});
+    QCOMPARE(mode->currentData().toString(), QStringLiteral("landscape"));
+}
+
+void UiSmokeTest::titlePackageControlsRoundTrip()
+{
+    mixvera::ui::AddInputDialog dialog;
+    mixvera::core::InputDescriptor title;
+    title.id = "package-title";
+    title.name = "Package";
+    title.kind = mixvera::core::InputKind::Title;
+    title.params["style"] = "package";
+    title.params["package"] = "C:/Titles/example.gtzip";
+    title.params["text"] = "HELLO";
+    title.params["subtitle"] = "Second line";
+    title.params["captions"] = "ONE\nTWO";
+    title.params["titleText:Headline"] = "HELLO";
+    title.params["titleColor:Headline"] = "#ff0000";
+    title.params["titleImage:Logo"] = "C:/logo.png";
+    dialog.loadFrom(title);
+
+    auto* style = dialog.findChild<QComboBox*>("titleStyle");
+    auto* row = dialog.findChild<QWidget*>("titlePackageRow");
+    auto* path = dialog.findChild<QLineEdit*>("titlePackagePath");
+    auto* elements = dialog.findChild<QPushButton*>("titleElementsButton");
+    auto* info = dialog.findChild<QLabel*>("packageInfo");
+    QVERIFY(style != nullptr);
+    QVERIFY(row != nullptr);
+    QVERIFY(path != nullptr);
+    QVERIFY(elements != nullptr);
+    QVERIFY(info != nullptr);
+
+    QCOMPARE(style->currentData().toString(), QStringLiteral("package"));
+    QVERIFY(!row->isHidden());
+    QCOMPARE(path->text(), QStringLiteral("C:/Titles/example.gtzip"));
+    QVERIFY(!elements->isEnabled());
+    QVERIFY(info->text().contains(QStringLiteral("Could not read")));
+    QCOMPARE(style->itemData(style->findData(QStringLiteral("package"))).toString(),
+        QStringLiteral("package"));
+
+    const auto descriptor = dialog.descriptor();
+    QCOMPARE(descriptor.kind, mixvera::core::InputKind::Title);
+    const auto param = [&descriptor](const char* key) {
+        const auto it = descriptor.params.find(key);
+        return it == descriptor.params.end() ? QString() : QString::fromStdString(it->second);
+    };
+    QCOMPARE(param("style"), QStringLiteral("package"));
+    QCOMPARE(param("package"), QStringLiteral("C:/Titles/example.gtzip"));
+    QCOMPARE(param("text"), QStringLiteral("HELLO"));
+    QCOMPARE(param("subtitle"), QStringLiteral("Second line"));
+    QCOMPARE(param("captions"), QStringLiteral("ONE\nTWO"));
+    QCOMPARE(param("titleText:Headline"), QStringLiteral("HELLO"));
+    QCOMPARE(param("titleColor:Headline"), QStringLiteral("#ff0000"));
+    QCOMPARE(param("titleImage:Logo"), QStringLiteral("C:/logo.png"));
+}
+
+void UiSmokeTest::titleElementDialogEditsText()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = writeSyntheticPackage(directory);
+    QVERIFY(!path.isEmpty());
+    const mixvera::ui::TitlePackage package = mixvera::ui::TitlePackage::load(path);
+    QVERIFY(package.isValid());
+
+    mixvera::ui::TitleElementDialog dialog(package, {}, {}, {}, QSize(1280, 720));
+    auto* list = dialog.findChild<QListWidget*>("titleElementList");
+    auto* text = dialog.findChild<QPlainTextEdit*>("titleElementText");
+    QVERIFY(list != nullptr);
+    QVERIFY(text != nullptr);
+    QCOMPARE(list->count(), 4);
+
+    int headlineRow = -1;
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->text().startsWith(QStringLiteral("Headline"))) {
+            headlineRow = row;
+            break;
+        }
+    }
+    QVERIFY(headlineRow >= 0);
+    list->setCurrentRow(headlineRow);
+    QCOMPARE(text->toPlainText(), QStringLiteral("DEFAULT HEADLINE"));
+
+    text->setPlainText(QStringLiteral("LIVE HEADLINE"));
+    QCOMPARE(dialog.textValues().value(QStringLiteral("Headline")),
+        QStringLiteral("LIVE HEADLINE"));
+    text->clear();
+    QVERIFY(!dialog.textValues().contains(QStringLiteral("Headline")));
+}
+
+void UiSmokeTest::titlePresetsApplySnapshots()
+{
+    mixvera::ui::MainWindow window(false);
+    window.show();
+    QTest::qWait(150);
+
+    auto& inputs = mixvera::core::Application::instance().services()
+                       .get<mixvera::services::InputService>();
+    std::string titleId;
+    for (const auto& input : inputs.inputs()) {
+        if (input.kind == mixvera::core::InputKind::Title) {
+            titleId = input.id;
+            break;
+        }
+    }
+    QVERIFY(!titleId.empty());
+
+    auto title = *inputs.find(titleId);
+    title.params["titlePreset:0:label"] = "ONE";
+    title.params["titlePreset:0:titleText:Headline"] = "FIRST";
+    title.params["titlePreset:1:label"] = "TWO";
+    title.params["titlePreset:1:titleText:Headline"] = "SECOND";
+    title.params["titlePresetActive"] = "0";
+    title.params.erase("titleText:Headline");
+    QVERIFY(inputs.update(title));
+
+    const QString id = QString::fromStdString(titleId);
+    QVERIFY(QMetaObject::invokeMethod(&window, "onTitleAction", Qt::DirectConnection,
+        Q_ARG(QString, id), Q_ARG(QString, QStringLiteral("presetNext"))));
+    const auto& applied = *inputs.find(titleId);
+    QCOMPARE(QString::fromStdString(applied.params.at("titlePresetActive")), QString("1"));
+    QCOMPARE(QString::fromStdString(applied.params.at("titleText:Headline")),
+        QString("SECOND"));
+    QVERIFY(applied.params.count("titlePresetChanged") == 1);
+
+    QVERIFY(QMetaObject::invokeMethod(&window, "onTitleAction", Qt::DirectConnection,
+        Q_ARG(QString, id), Q_ARG(QString, QStringLiteral("presetPrev"))));
+    QCOMPARE(QString::fromStdString(inputs.find(titleId)->params.at("titleText:Headline")),
+        QString("FIRST"));
+
+    QVERIFY(QMetaObject::invokeMethod(&window, "onTitleAction", Qt::DirectConnection,
+        Q_ARG(QString, id), Q_ARG(QString, QStringLiteral("presetClear"))));
+    for (const auto& entry : inputs.find(titleId)->params) {
+        QVERIFY(QString::fromStdString(entry.first)
+                    .startsWith(QStringLiteral("titlePreset:"))
+            == false);
+    }
+}
+
+void UiSmokeTest::subtitleActionsStepPresets()
+{
+    mixvera::ui::MainWindow window(false);
+    window.show();
+    QTest::qWait(150);
+
+    auto& inputs = mixvera::core::Application::instance().services()
+                       .get<mixvera::services::InputService>();
+    std::string titleId;
+    for (const auto& input : inputs.inputs()) {
+        if (input.kind == mixvera::core::InputKind::Title) {
+            titleId = input.id;
+            break;
+        }
+    }
+    QVERIFY(!titleId.empty());
+
+    auto title = *inputs.find(titleId);
+    title.params["style"] = "caption";
+    title.params["captions"] = "ONE\nTWO\nTHREE";
+    title.params["text"] = "ONE";
+    title.params["captionIndex"] = "0";
+    QVERIFY(inputs.update(title));
+
+    const QString id = QString::fromStdString(titleId);
+    QVERIFY(QMetaObject::invokeMethod(&window, "onTitleAction", Qt::DirectConnection,
+        Q_ARG(QString, id), Q_ARG(QString, QStringLiteral("captionNext"))));
+    QCOMPARE(QString::fromStdString(inputs.find(titleId)->params.at("text")), QString("TWO"));
+
+    QVERIFY(QMetaObject::invokeMethod(&window, "onTitleAction", Qt::DirectConnection,
+        Q_ARG(QString, id), Q_ARG(QString, QStringLiteral("captionPrev"))));
+    QCOMPARE(QString::fromStdString(inputs.find(titleId)->params.at("text")), QString("ONE"));
+
+    QVERIFY(QMetaObject::invokeMethod(&window, "onTitleAction", Qt::DirectConnection,
+        Q_ARG(QString, id), Q_ARG(QString, QStringLiteral("captionClear"))));
+    QCOMPARE(QString::fromStdString(inputs.find(titleId)->params.at("text")), QString());
+}
+
+void UiSmokeTest::chromaKeyRoundTripsThroughDialog()
+{
+    mixvera::ui::AddInputDialog dialog;
+
+    mixvera::core::InputDescriptor camera;
+    camera.id = "camera";
+    camera.name = "Camera";
+    camera.kind = mixvera::core::InputKind::Camera;
+    camera.params["device"] = "";
+    camera.params["chromaEnabled"] = "1";
+    camera.params["chromaPreset"] = "green";
+    camera.params["chromaColor"] = "#00ff00";
+    camera.params["chromaSimilarity"] = "40";
+    camera.params["chromaSmoothness"] = "20";
+    camera.params["chromaSpill"] = "70";
+    dialog.loadFrom(camera);
+
+    auto* enabled = dialog.findChild<QCheckBox*>("chromaEnabled");
+    QVERIFY(enabled != nullptr);
+    QVERIFY(enabled->isChecked());
+    auto* preset = dialog.findChild<QComboBox*>("chromaPreset");
+    QVERIFY(preset != nullptr);
+    QCOMPARE(preset->currentData().toString(), QString("green"));
+
+    preset->setCurrentIndex(preset->findData("blue"));
+    const auto output = dialog.descriptor();
+    QCOMPARE(output.kind, mixvera::core::InputKind::Camera);
+    QCOMPARE(QString::fromStdString(output.params.at("chromaEnabled")), QString("1"));
+    QCOMPARE(QString::fromStdString(output.params.at("chromaPreset")), QString("blue"));
+    QCOMPARE(QString::fromStdString(output.params.at("chromaColor")), QString("#0000ff"));
+    QCOMPARE(QString::fromStdString(output.params.at("chromaSimilarity")), QString("40"));
+
+    mixvera::core::InputDescriptor title;
+    title.id = "title";
+    title.name = "Title";
+    title.kind = mixvera::core::InputKind::Title;
+    title.params["style"] = "caption";
+    title.params["text"] = "ONE";
+    title.params["captions"] = "ONE\nTWO";
+    title.params["tickerSpeed"] = "200";
+    dialog.loadFrom(title);
+    const auto titleOutput = dialog.descriptor();
+    QCOMPARE(QString::fromStdString(titleOutput.params.at("captions")), QString("ONE\nTWO"));
+    QCOMPARE(QString::fromStdString(titleOutput.params.at("tickerSpeed")), QString("200"));
+    QVERIFY(titleOutput.params.find("chromaEnabled") == titleOutput.params.end());
 }
 
 void UiSmokeTest::recordsThroughTheUi()

@@ -43,6 +43,7 @@ signals:
     void addToSceneRequested(const QString& id);
     void overlayAssignRequested(const QString& id, int layer);
     void overlayClearRequested(const QString& id);
+    void chromaKeyRequested(const QString& id, const QString& mode);
     void titleActionRequested(const QString& id, const QString& action);
     void removeRequested(const QString& id);
     void propertiesRequested(const QString& id);

@@ -1,6 +1,6 @@
-# Mixvera 界面参照：OBS 与 vMix 的可验证观察
+# Mixvera 界面参照：OBS、vMix 与 SinSam 的可验证观察
 
-这份文档记录 `0.3.0` 布局与 `0.4.0` 主题、调音台、设置界面的证据来源。原则是**只借鉴公开可观察的界面组织与配色值，不复制任何专有代码、图标或资源**。0.4 的实现约定（token 表、尺寸、交互）另见 [DESIGN.md](DESIGN.md)。
+这份文档记录 `0.3.0` 布局，`0.4.0` 主题、调音台与设置界面，以及 `0.5.0`–`0.6.0` SinSam / vMix GT 移植的证据来源。原则是**只借鉴公开可观察的界面组织与配色值，不复制任何专有代码、图标或资源**。实现约定（token 表、尺寸、交互）另见 [DESIGN.md](DESIGN.md)。
 
 ## 取证环境
 
@@ -11,6 +11,7 @@
 | vMix 28 | `C:\Program Files (x86)\vMix` | 语言包、窗体控件清单、程序集元数据 |
 | vMix 29 安装包 | `D:\Mixvera\vmix29.exe` | Inno Setup 只读解包，用于核对 29 版新增控件与中文条目；主界面证据以已安装的 vMix 28 与官方截图为底 |
 | vMix 28 官方帮助主窗口截图 | `build/analysis/vmix/NewItem446.png`（1245×743，本机分析目录，未入库） | 布局与配色的视觉证据；安装版受授权限制无法启动 |
+| vMix 28 安装目录 `titles/` | `C:\Program Files (x86)\vMix\titles` | GT 标题模板库：743 个 `.gtzip` / 87 个 `.xaml`，0.6 只读解析 |
 
 vMix 28 启动后会停在 “License Request — vMix software won't run without a valid license file”，确认没有可用授权，因此**没有运行中的 vMix 界面截图**。布局证据来自官方帮助页截图，取色使用本地像素采样；这条限制不影响控件清单与术语取证。
 
@@ -216,12 +217,73 @@ Mixvera 的取舍：
 | 标题控制子菜单（倒计时开始/暂停/重置、比分 ±1） | SinSam tools.json Title 类别与 `Increment` | `input_panel.cpp`、`main_window.cpp` `onTitleAction` |
 | 快照按钮与 `Ctrl+Shift+P` | SinSam Output 类别 `Snaphost`（原文如此） | `main_window.cpp` `onSnapshot` |
 
+## 0.6：SinSam 竖屏、抠像与字幕
+
+0.6 的证据来自同一安装包的 `sinsam.dll`：UTF-8 字符串块给出中文功能名，托管元数据给出对应的参数类型与设置方法。偏移是 `sinsam.dll` 文件内的字节偏移，用于复现；没有反编译方法体。
+
+| 界面元素 | 证据（`sinsam.dll` 偏移 / 托管名） | Mixvera 落点 |
+| --- | --- | --- |
+| 竖屏 / 横屏画布 | `竖屏功能` `0x874c3b`、`横屏` `0x876d79`、`竖屏` `0x876d85`、导入尺寸提示 `1080*1920` `0x8769df`；许可证标签 `最大分辨率` `0x874c26` | 画布预设（1080×1920 / 720×1280 / 1080×1080）、「视图 → 竖屏画布」、`--canvas` |
+| 界面模式切换 | `切换界面模式` `0x875e3b`、`切换界面布局` `0x875df3`、`专业模式` `0x876d55`、`电商模式` `0x876d67` | **未采用**：工作区仍为横向双监视器，只改变画布方向 |
+| 蓝绿专用 / 任意颜色抠图 | `蓝绿专用抠图` `0x87537e`、`任意颜色抠图` `0x875396`、`高级抠图` `0x8753ae` / `0x8775d7` | 输入属性「CHROMA KEY」：绿幕 / 蓝幕 / 自定义色 |
+| 抠像参数分组 | `VZ_ChromaKeyParam` `0x78a72f`、`VZ_KeyCleanerParam` `0x78a741`、`ChromaKeyMatting` `0x78d85c`、`ChromaKeyMattingColorType` `0x78d88e`、`SetChromaKeyMattingParam` `0x7ee2d8`、`SetKeyCleanerParam` `0x7ec367` | `chromaColor` / `chromaSimilarity` / `chromaSmoothness` / `chromaSpill`；键色 + 容差 + 边缘 + 溢色四段 |
+| 区域抠图 / 遮罩 | `区域抠图改变` `0x875c1f`、`抠图初始化` `0x875c37`、`VZ_ChromaKeyAreaParam` `0x78a719` / `0x7f9ee8`、`SetChromaKeyMask` `0x7ee3bb`、`FrmChromaKeyMaskPoint` `0x7900ed` / `0x845d74` | **未采用**：不做区域限定与异形遮罩，保持整幅键控 |
+| 本地字幕 / 在线字幕 | `本地字幕` `0x874cc2`、`在线字幕` `0x874cd4` | 字幕条与滚动字幕；在线字幕与 AI 语音不移植 |
+| 字幕编辑与文案 | `字幕编辑` `0x87180b`、`字幕文案` `0x87181d`、`字幕设计编辑器` `0x874e67` | 多行预置文案 + 输入条右键逐句切换；不做设计器 |
+| 滚动字幕 | `TitleTicker` `0x78d7b0` | 标题「滚动字幕」样式，20–800 px/s |
+| 语音字幕 | `TitleSpeech` `0x78d7a4`、`AISpeechSource` `0x79bbc2` | **未采用**：依赖在线语音服务 |
+
+字幕与抠像都只取「功能名 → 参数语义」这一层：Mixvera 的文字排版、底板颜色、圆角、滚动条形态全部自绘，没有在仓库中分发或复制 SinSam 的 `.gtzip` / `.sinsamtitle` / `.pag` 模板，也没有复制其界面截图或字体；0.6 起只读解析 GT 文档（见下一节）。
+
+## 0.6（续）：GT 标题包装与显示模式
+
+0.6 有两个证据面：vMix 28 安装目录的 GT 模板库（只读解析）与 SinSam 的字幕导入字符串。它们决定了「标题包装」样式的控件与可编辑元素。
+
+### vMix GT 模板库
+
+本机 `C:\Program Files (x86)\vMix\titles` 下的 743 个 `.gtzip` 与 87 个 `.xaml`，只读扫描（不运行 vMix）：
+
+| 观察 | 数量 / 取值 | 用途 |
+| --- | --- | --- |
+| GT Title | 400 | 主模板集，Headline / Description / Top Text 等元素命名 |
+| GT Vertical | 147 | 3412×1920 艺术板，中心 1080×1920 画面 |
+| GT Stingers / Social | 66 / 63 | 动画与社交模板，Storyboard 覆盖 |
+| GT ScoreBoard / Text / Timer / Ticker | 18 / 18 / 17 / 14 | 比分、纯文本、时钟与滚动字幕 |
+| `Transform Rotate` | `"x,y,z"`，0–6.28 为主 | 按弧度解析 |
+| `Storyboard Type` | 空 / `TransitionOut` / `DataChangeIn` / `DataChangeOut` | 入口、出场、数据变更 |
+| `Ticker Direction` | 空为主，少量 `Top` | 竖向滚动 |
+| 图片 | `Stretch="Fill"`、`SizeMode="Stretch"` | 铺满目标框 |
+| Timer 文本 | `{0:HH:mm}`、`{0:hh:mm tt}`、`{0:hh:mm:ss tt}`、`{0:4:00PM\|mm:ss}` | .NET 时钟格式 |
+
+**界面落点**：添加输入 → 标题 → 「标题包装」行（路径 + `Browse…` + `Elements…`）；包装信息标签显示可编辑元素数量；包装样式下「字幕文案」多行框用作逐句文本。输入条右键新增「保存标题预置…」「上一个 / 下一个标题预置」「删除标题预置」「设置标题文字…」「上一句字幕 / 下一句字幕 / 清除标题文字」。
+
+### SinSam 字幕导入
+
+| 观察（`sinsam.dll`） | 落点 |
+| --- | --- |
+| 导入过滤器 `.xaml;.gtzip`，描述里另有 `.sinsamtitle`（`0x87678a`） | 文件对话框接受 `*.gtzip *.sinsamtitle *.xaml` |
+| 导入提示 `字幕文件格式：gt，gtzip`、100 MB 上限（`0x8767d1`） | 只读文件，不写回；解析失败在对话框内提示 |
+| `选择字幕选择预设文本` `0x87572c` | 「保存 / 上一个 / 下一个 / 删除标题预置」命名快照 |
+| `字幕元素属性改变` `0x875750`、MCP `GetTitleElementProps` | 「Elements…」列出文本 / 图片 / 颜色元素并可覆盖 |
+| `TitleTicker` `0x78d7b0`、`TitleAnimationTickerForm` 资源 | 包装 Ticker 元素与内置滚动字幕共用渲染语义 |
+
+### 显示模式
+
+| 界面元素 | 证据 | 落点 |
+| --- | --- | --- |
+| 设置 → 视频「显示模式」下拉 | SinSam `横屏` `0x876d79` / `竖屏` `0x876d85`；vMix 输出同样由宽高驱动 | `settings_dialog.cpp` 的 `canvasMode` |
+| 视图菜单互斥的横屏 / 竖屏 | 同一组字符串 | `main_window.cpp` 的 `landscapeAction` / `portraitAction` |
+| `--mode landscape\|portrait` | 无直接证据，是截图与自动化入口 | `apps/mixvera/main.cpp` |
+
+包装文件只作为输入读取，仓库不分发任何 vMix / SinSam 模板；界面上的路径、元素列表与预置菜单均为自绘。
+
 ## 有意不做的事
 
 - 不复制 OBS 的图标、QSS 全文、位图资源；只取颜色值与控件语义
 - 不复制 vMix 的窗体布局坐标、业务逻辑或语言包文本；控件名仅用于确认功能集合
 - 不实现 vMix 的虚拟集、Photos、PowerPoint、DVD、SRT、MultiCorder 等专有输入与功能
 - 不实现 OBS 的虚拟摄像头、Replay Buffer、场景集合（Scene Collection）等本版范围外能力
+- 不复制 GT 模板文件及其字体 / 纹理；只读解析 `document.xml` 的语义，仓库附带的演示包装是自绘的
 
 ## 复现取证
 

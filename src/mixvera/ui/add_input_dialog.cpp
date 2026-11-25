@@ -1,7 +1,11 @@
 #include "mixvera/ui/add_input_dialog.hpp"
 
+#include "mixvera/ui/media/chroma_key.hpp"
+#include "mixvera/ui/media/title_package.hpp"
 #include "mixvera/ui/platform/win_capture.hpp"
+#include "mixvera/ui/title_element_dialog.hpp"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QColorDialog>
 #include <QCameraDevice>
@@ -119,11 +123,44 @@ void AddInputDialog::buildUi()
     auto* titlePage = new QWidget(pages_);
     auto* titleForm = new QFormLayout(titlePage);
     titleStyle_ = new QComboBox(titlePage);
+    titleStyle_->setObjectName("titleStyle");
     titleStyle_->addItem(tr("Full Screen"), "full");
     titleStyle_->addItem(tr("Lower Third"), "lower");
     titleStyle_->addItem(tr("Countdown"), "countdown");
     titleStyle_->addItem(tr("Scoreboard"), "scoreboard");
+    titleStyle_->addItem(tr("Subtitle"), "caption");
+    titleStyle_->addItem(tr("Rolling Ticker"), "ticker");
+    titleStyle_->addItem(tr("Title Package"), "package");
     titleForm->addRow(tr("Style"), titleStyle_);
+
+    packageRow_ = new QWidget(titlePage);
+    packageRow_->setObjectName("titlePackageRow");
+    auto* packageLayout = new QVBoxLayout(packageRow_);
+    packageLayout->setContentsMargins(0, 0, 0, 0);
+    packageLayout->setSpacing(4);
+    auto* packageLine = new QHBoxLayout;
+    packageLine->setContentsMargins(0, 0, 0, 0);
+    packagePath_ = new QLineEdit(packageRow_);
+    packagePath_->setObjectName("titlePackagePath");
+    packagePath_->setPlaceholderText(tr("Select a .gtzip, .sinsamtitle or .xaml title package"));
+    packageBrowse_ = new QPushButton(tr("Browse…"), packageRow_);
+    editElements_ = new QPushButton(tr("Elements…"), packageRow_);
+    editElements_->setObjectName("titleElementsButton");
+    packageLine->addWidget(packagePath_, 1);
+    packageLine->addWidget(packageBrowse_);
+    packageLine->addWidget(editElements_);
+    packageLayout->addLayout(packageLine);
+    packageInfo_ = new QLabel(packageRow_);
+    packageInfo_->setObjectName("packageInfo");
+    packageInfo_->setWordWrap(true);
+    packageLayout->addWidget(packageInfo_);
+    titleForm->addRow(tr("Package"), packageRow_);
+    titleForm_ = titleForm;
+    packageRow_->setVisible(false);
+    if (auto* label = titleForm_->labelForField(packageRow_)) {
+        label->setVisible(false);
+    }
+
     text_ = new QPlainTextEdit(titlePage);
     text_->setPlaceholderText(tr("Title text, one line per row"));
     text_->setFixedHeight(84);
@@ -131,6 +168,15 @@ void AddInputDialog::buildUi()
     subtitle_ = new QLineEdit(titlePage);
     subtitle_->setPlaceholderText(tr("Optional second line for lower thirds"));
     titleForm->addRow(tr("Subtitle"), subtitle_);
+    captions_ = new QPlainTextEdit(titlePage);
+    captions_->setPlaceholderText(tr("Subtitle lines for Next / Previous, one per line"));
+    captions_->setFixedHeight(64);
+    titleForm->addRow(tr("Subtitle Lines"), captions_);
+    tickerSpeed_ = new QSpinBox(titlePage);
+    tickerSpeed_->setRange(20, 800);
+    tickerSpeed_->setValue(120);
+    tickerSpeed_->setSuffix(" px/s");
+    titleForm->addRow(tr("Ticker Speed"), tickerSpeed_);
     textSize_ = new QSpinBox(titlePage);
     textSize_->setRange(12, 200);
     textSize_->setValue(64);
@@ -173,6 +219,42 @@ void AddInputDialog::buildUi()
     awayLayout->addWidget(awayName_, 1);
     awayLayout->addWidget(awayScore_);
     titleForm->addRow(tr("Away Team"), awayRow);
+    connect(titleStyle_, &QComboBox::currentIndexChanged, this,
+        [this] { updateTitleStyleControls(); });
+    connect(packagePath_, &QLineEdit::textChanged, this,
+        [this] { updateTitleStyleControls(); });
+    connect(packageBrowse_, &QPushButton::clicked, this, [this] {
+        const QString start = packagePath_->text().isEmpty()
+            ? QString()
+            : QFileInfo(packagePath_->text()).absolutePath();
+        const QString path = QFileDialog::getOpenFileName(this, tr("Select Title Package"),
+            start, tr("GT title packages (*.gtzip *.sinsamtitle *.xaml);;All files (*)"));
+        if (!path.isEmpty()) {
+            if (path != packagePath_->text()) {
+                elementTexts_.clear();
+                elementColours_.clear();
+                elementImages_.clear();
+            }
+            packagePath_->setText(path);
+            if (name_->text().isEmpty() || name_->text() == tr("Title")) {
+                name_->setText(QFileInfo(path).completeBaseName());
+            }
+        }
+    });
+    connect(editElements_, &QPushButton::clicked, this, [this] {
+        const QString path = packagePath_->text().trimmed();
+        const mixvera::ui::TitlePackage package = mixvera::ui::TitlePackage::load(path);
+        if (!package.isValid()) {
+            return;
+        }
+        mixvera::ui::TitleElementDialog dialog(package, elementTexts_, elementColours_,
+            elementImages_, QSize(), this);
+        if (dialog.exec() == QDialog::Accepted) {
+            elementTexts_ = dialog.textValues();
+            elementColours_ = dialog.colourValues();
+            elementImages_ = dialog.imageValues();
+        }
+    });
     pages_->addWidget(titlePage);
 
     auto* colourPage = new QWidget(pages_);
@@ -191,6 +273,52 @@ void AddInputDialog::buildUi()
 
     root->addWidget(pages_, 1);
 
+    chromaPanel_ = new QWidget(this);
+    auto* chromaLayout = new QVBoxLayout(chromaPanel_);
+    chromaLayout->setContentsMargins(0, 2, 0, 0);
+    chromaLayout->setSpacing(6);
+    auto* chromaTitle = new QLabel(tr("CHROMA KEY"), chromaPanel_);
+    chromaTitle->setObjectName("cardTitle");
+    chromaLayout->addWidget(chromaTitle);
+
+    auto* chromaForm = new QFormLayout;
+    chromaForm->setSpacing(6);
+    chromaEnabled_ = new QCheckBox(tr("Remove a green or blue screen"), chromaPanel_);
+    chromaEnabled_->setObjectName("chromaEnabled");
+    chromaForm->addRow(QString(), chromaEnabled_);
+
+    chromaPreset_ = new QComboBox(chromaPanel_);
+    chromaPreset_->setObjectName("chromaPreset");
+    chromaPreset_->addItem(tr("Green Screen"), "green");
+    chromaPreset_->addItem(tr("Blue Screen"), "blue");
+    chromaPreset_->addItem(tr("Custom Colour"), "custom");
+    chromaForm->addRow(tr("Key Colour"), chromaPreset_);
+
+    chromaColour_ = new QPushButton(chromaValue_.name().toUpper(), chromaPanel_);
+    chromaColour_->setObjectName("chromaColourButton");
+    chromaForm->addRow(tr("Custom Colour"), chromaColour_);
+
+    chromaSimilarity_ = new QSpinBox(chromaPanel_);
+    chromaSimilarity_->setRange(0, 100);
+    chromaSimilarity_->setValue(35);
+    chromaSimilarity_->setSuffix(" %");
+    chromaForm->addRow(tr("Similarity"), chromaSimilarity_);
+
+    chromaSmoothness_ = new QSpinBox(chromaPanel_);
+    chromaSmoothness_->setRange(0, 100);
+    chromaSmoothness_->setValue(18);
+    chromaSmoothness_->setSuffix(" %");
+    chromaForm->addRow(tr("Smoothness"), chromaSmoothness_);
+
+    chromaSpill_ = new QSpinBox(chromaPanel_);
+    chromaSpill_->setRange(0, 100);
+    chromaSpill_->setValue(60);
+    chromaSpill_->setSuffix(" %");
+    chromaForm->addRow(tr("Spill Suppression"), chromaSpill_);
+
+    chromaLayout->addLayout(chromaForm);
+    root->addWidget(chromaPanel_);
+
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     root->addWidget(buttons);
 
@@ -201,11 +329,53 @@ void AddInputDialog::buildUi()
     connect(browse_, &QPushButton::clicked, this, &AddInputDialog::browseFile);
     connect(colour_, &QPushButton::clicked, this, &AddInputDialog::pickColour);
     connect(colourPick, &QPushButton::clicked, this, &AddInputDialog::pickColour);
+    connect(chromaEnabled_, &QCheckBox::toggled, this,
+        [this] { updateChromaControls(); });
+    connect(chromaPreset_, &QComboBox::currentIndexChanged, this, [this] {
+        const QString preset = chromaPreset_->currentData().toString();
+        if (preset == "green") {
+            chromaValue_ = QColor("#00ff00");
+        } else if (preset == "blue") {
+            chromaValue_ = QColor("#0000ff");
+        }
+        updateChromaControls();
+    });
+    connect(chromaColour_, &QPushButton::clicked, this, &AddInputDialog::pickChromaColour);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     updatePage();
     refreshName();
+    updateChromaControls();
+}
+
+void AddInputDialog::pickChromaColour()
+{
+    const QColor chosen = QColorDialog::getColor(chromaValue_, this, tr("Choose Key Colour"));
+    if (!chosen.isValid()) {
+        return;
+    }
+    chromaValue_ = chosen;
+    const int custom = chromaPreset_->findData("custom");
+    if (custom >= 0) {
+        chromaPreset_->setCurrentIndex(custom);
+    }
+    updateChromaControls();
+}
+
+void AddInputDialog::updateChromaControls()
+{
+    if (!chromaEnabled_) {
+        return;
+    }
+    const bool enabled = chromaEnabled_->isChecked();
+    const bool custom = chromaPreset_->currentData().toString() == "custom";
+    chromaPreset_->setEnabled(enabled);
+    chromaColour_->setEnabled(enabled && custom);
+    chromaSimilarity_->setEnabled(enabled);
+    chromaSmoothness_->setEnabled(enabled);
+    chromaSpill_->setEnabled(enabled);
+    chromaColour_->setText(chromaValue_.name().toUpper());
 }
 
 void AddInputDialog::updatePage()
@@ -235,6 +405,52 @@ void AddInputDialog::updatePage()
         pages_->setCurrentIndex(6);
         break;
     }
+    if (chromaPanel_) {
+        chromaPanel_->setVisible(inputSupportsChromaKey(kind));
+    }
+}
+
+void AddInputDialog::updateTitleStyleControls()
+{
+    if (!titleStyle_ || !packageRow_ || !titleForm_) {
+        return;
+    }
+    const bool package = titleStyle_->currentData().toString() == "package";
+    packageRow_->setVisible(package);
+    if (auto* label = titleForm_->labelForField(packageRow_)) {
+        label->setVisible(package);
+    }
+    if (auto* label = qobject_cast<QLabel*>(titleForm_->labelForField(captions_))) {
+        label->setText(package ? tr("Caption Texts") : tr("Subtitle Lines"));
+    }
+    captions_->setPlaceholderText(package
+            ? tr("Caption texts, one per line (Next Caption cycles them)")
+            : tr("Subtitle lines for Next / Previous, one per line"));
+    editElements_->setEnabled(false);
+    if (!package) {
+        return;
+    }
+    const QString path = packagePath_->text().trimmed();
+    if (path.isEmpty()) {
+        packageInfo_->setText(tr("Choose a vMix or SinSam .gtzip, .sinsamtitle or .xaml package."));
+        return;
+    }
+    const auto elements = titlePackageElements(path);
+    if (elements.isEmpty()) {
+        packageInfo_->setText(tr("Could not read this title package."));
+        return;
+    }
+    editElements_->setEnabled(true);
+    QStringList names;
+    for (int index = 0; index < elements.size() && index < 8; ++index) {
+        names.append(elements.at(index).name);
+    }
+    if (elements.size() > names.size()) {
+        names.append(QStringLiteral("…"));
+    }
+    packageInfo_->setText(tr("%1 editable elements: %2")
+            .arg(elements.size())
+            .arg(names.join(QStringLiteral(", "))));
 }
 
 void AddInputDialog::refreshName()
@@ -262,7 +478,12 @@ void AddInputDialog::refreshName()
                                                : QFileInfo(file_->text()).baseName());
         break;
     case core::InputKind::Title:
-        name_->setText(tr("Title"));
+        if (titleStyle_->currentData().toString() == "package"
+            && !packagePath_->text().isEmpty()) {
+            name_->setText(QFileInfo(packagePath_->text()).completeBaseName());
+        } else {
+            name_->setText(tr("Title"));
+        }
         break;
     case core::InputKind::Color:
         name_->setText(tr("Colour"));
@@ -336,8 +557,29 @@ void AddInputDialog::loadFrom(const core::InputDescriptor& input)
     } else if (input.kind == core::InputKind::Title) {
         const int styleIndex = titleStyle_->findData(value("style"));
         titleStyle_->setCurrentIndex(styleIndex < 0 ? 0 : styleIndex);
+        packagePath_->setText(value("package"));
+        elementTexts_.clear();
+        elementColours_.clear();
+        elementImages_.clear();
+        for (const auto& entry : input.params) {
+            const QString key = QString::fromStdString(entry.first);
+            const QString entryValue = QString::fromStdString(entry.second);
+            if (key.startsWith(QLatin1String(title_params::kTextPrefix))) {
+                elementTexts_.insert(key.mid(10), entryValue);
+            } else if (key.startsWith(QLatin1String(title_params::kColourPrefix))) {
+                const QColor colour(entryValue);
+                if (colour.isValid()) {
+                    elementColours_.insert(key.mid(11), colour);
+                }
+            } else if (key.startsWith(QLatin1String(title_params::kImagePrefix))) {
+                elementImages_.insert(key.mid(11), entryValue);
+            }
+        }
         text_->setPlainText(value("text"));
         subtitle_->setText(value("subtitle"));
+        captions_->setPlainText(value("captions"));
+        const int tickerSpeed = value("tickerSpeed").toInt();
+        tickerSpeed_->setValue(tickerSpeed > 0 ? tickerSpeed : 120);
         textSize_->setValue(value("size").toInt());
         const int alignIndex = align_->findData(value("align"));
         align_->setCurrentIndex(alignIndex < 0 ? 1 : alignIndex);
@@ -354,7 +596,37 @@ void AddInputDialog::loadFrom(const core::InputDescriptor& input)
         colourValue_ = QColor(value("color"));
         setStyleSheet(QString());
     }
+
+    chromaEnabled_->setChecked(value("chromaEnabled") == "1");
+    const QColor storedChroma(value("chromaColor"));
+    if (storedChroma.isValid()) {
+        chromaValue_ = storedChroma;
+    }
+    QString preset = value("chromaPreset");
+    if (preset.isEmpty()) {
+        if (chromaValue_.green() > chromaValue_.red() + 60
+            && chromaValue_.green() > chromaValue_.blue() + 60) {
+            preset = "green";
+        } else if (chromaValue_.blue() > chromaValue_.red() + 60
+            && chromaValue_.blue() > chromaValue_.green() + 60) {
+            preset = "blue";
+        } else {
+            preset = "custom";
+        }
+    }
+    const int presetIndex = chromaPreset_->findData(preset);
+    chromaPreset_->setCurrentIndex(presetIndex < 0 ? 0 : presetIndex);
+    chromaSimilarity_->setValue(value("chromaSimilarity").isEmpty()
+            ? 35
+            : value("chromaSimilarity").toInt());
+    chromaSmoothness_->setValue(value("chromaSmoothness").isEmpty()
+            ? 18
+            : value("chromaSmoothness").toInt());
+    chromaSpill_->setValue(value("chromaSpill").isEmpty() ? 60 : value("chromaSpill").toInt());
+
     updatePage();
+    updateChromaControls();
+    updateTitleStyleControls();
 }
 
 void AddInputDialog::lockKind(bool locked)
@@ -392,6 +664,8 @@ core::InputDescriptor AddInputDialog::descriptor() const
         input.params["text"] = text_->toPlainText().toStdString();
         input.params["style"] = titleStyle_->currentData().toString().toStdString();
         input.params["subtitle"] = subtitle_->text().trimmed().toStdString();
+        input.params["captions"] = captions_->toPlainText().toStdString();
+        input.params["tickerSpeed"] = std::to_string(tickerSpeed_->value());
         input.params["size"] = std::to_string(textSize_->value());
         input.params["align"] = align_->currentData().toString().toStdString();
         input.params["color"] = colourValue_.name().toStdString();
@@ -401,6 +675,29 @@ core::InputDescriptor AddInputDialog::descriptor() const
         input.params["awayName"] = awayName_->text().trimmed().toStdString();
         input.params["scoreHome"] = std::to_string(homeScore_->value());
         input.params["scoreAway"] = std::to_string(awayScore_->value());
+        input.params["package"] = packagePath_->text().trimmed().toStdString();
+        for (auto it = input.params.begin(); it != input.params.end();) {
+            const QString key = QString::fromStdString(it->first);
+            if (key.startsWith(QLatin1String(title_params::kTextPrefix))
+                || key.startsWith(QLatin1String(title_params::kColourPrefix))
+                || key.startsWith(QLatin1String(title_params::kImagePrefix))) {
+                it = input.params.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = elementTexts_.constBegin(); it != elementTexts_.constEnd(); ++it) {
+            input.params[title_params::textKey(it.key()).toStdString()]
+                = it.value().toStdString();
+        }
+        for (auto it = elementColours_.constBegin(); it != elementColours_.constEnd(); ++it) {
+            input.params[title_params::colourKey(it.key()).toStdString()]
+                = it.value().name(QColor::HexRgb).toStdString();
+        }
+        for (auto it = elementImages_.constBegin(); it != elementImages_.constEnd(); ++it) {
+            input.params[title_params::imageKey(it.key()).toStdString()]
+                = it.value().toStdString();
+        }
         break;
     case core::InputKind::Color:
         input.params["color"] = colourValue_.name().toStdString();
@@ -408,6 +705,20 @@ core::InputDescriptor AddInputDialog::descriptor() const
     default:
         input.params["pattern"] = pattern_->currentData().toString().toStdString();
         break;
+    }
+
+    if (inputSupportsChromaKey(input.kind)) {
+        input.params["chromaEnabled"] = chromaEnabled_->isChecked() ? "1" : "0";
+        input.params["chromaPreset"] = chromaPreset_->currentData().toString().toStdString();
+        input.params["chromaColor"] = chromaValue_.name().toStdString();
+        input.params["chromaSimilarity"] = std::to_string(chromaSimilarity_->value());
+        input.params["chromaSmoothness"] = std::to_string(chromaSmoothness_->value());
+        input.params["chromaSpill"] = std::to_string(chromaSpill_->value());
+    } else {
+        for (const char* key : {"chromaEnabled", "chromaPreset", "chromaColor",
+                 "chromaSimilarity", "chromaSmoothness", "chromaSpill"}) {
+            input.params.erase(key);
+        }
     }
 
     input.hasAudio = core::inputKindHasAudio(input.kind);

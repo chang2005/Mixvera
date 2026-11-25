@@ -1,5 +1,7 @@
 #include "mixvera/ui/input_panel.hpp"
 
+#include "mixvera/ui/media/chroma_key.hpp"
+
 #include <QButtonGroup>
 #include <QContextMenuEvent>
 #include <QHBoxLayout>
@@ -433,6 +435,9 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
     QAction* remove = nullptr;
     QAction* overlayNone = nullptr;
     QList<QAction*> overlayLayers;
+    QAction* chromaOff = nullptr;
+    QAction* chromaGreen = nullptr;
+    QAction* chromaBlue = nullptr;
     QAction* titleStart = nullptr;
     QAction* titlePause = nullptr;
     QAction* titleReset = nullptr;
@@ -440,6 +445,15 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
     QAction* homeMinus = nullptr;
     QAction* awayPlus = nullptr;
     QAction* awayMinus = nullptr;
+    QAction* captionSet = nullptr;
+    QAction* captionNext = nullptr;
+    QAction* captionPrev = nullptr;
+    QAction* captionClear = nullptr;
+    QAction* titleElements = nullptr;
+    QAction* presetSave = nullptr;
+    QAction* presetNext = nullptr;
+    QAction* presetPrev = nullptr;
+    QAction* presetClear = nullptr;
 
     if (!id.isEmpty()) {
         preview = menu.addAction(tr("Set Preview"));
@@ -461,6 +475,27 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
                 break;
             }
         }
+        if (input && inputSupportsChromaKey(input->kind)) {
+            const ChromaKeySettings settings = chromaKeySettings(*input);
+            QMenu* chroma = menu.addMenu(tr("Chroma Key"));
+            chromaOff = chroma->addAction(tr("Off"));
+            chromaGreen = chroma->addAction(tr("Green Screen"));
+            chromaBlue = chroma->addAction(tr("Blue Screen"));
+            for (QAction* action : {chromaOff, chromaGreen, chromaBlue}) {
+                action->setCheckable(true);
+            }
+            if (settings.enabled) {
+                if (settings.color.green() > settings.color.red() + 60
+                    && settings.color.green() > settings.color.blue() + 60) {
+                    chromaGreen->setChecked(true);
+                } else if (settings.color.blue() > settings.color.red() + 60
+                    && settings.color.blue() > settings.color.green() + 60) {
+                    chromaBlue->setChecked(true);
+                }
+            } else {
+                chromaOff->setChecked(true);
+            }
+        }
         if (input && input->kind == core::InputKind::Title) {
             QMenu* title = menu.addMenu(tr("Title Controls"));
             titleStart = title->addAction(tr("Start / Resume Countdown"));
@@ -471,6 +506,31 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
             homeMinus = title->addAction(tr("Home Score −1"));
             awayPlus = title->addAction(tr("Away Score +1"));
             awayMinus = title->addAction(tr("Away Score −1"));
+
+            const auto styleIt = input->params.find("style");
+            const QString style = styleIt == input->params.end()
+                ? QString()
+                : QString::fromStdString(styleIt->second);
+            if (style == "package") {
+                title->addSeparator();
+                titleElements = title->addAction(tr("Edit Title Elements…"));
+                presetSave = title->addAction(tr("Save Title Preset…"));
+                presetPrev = title->addAction(tr("Previous Title Preset"));
+                presetNext = title->addAction(tr("Next Title Preset"));
+                presetClear = title->addAction(tr("Delete Title Presets"));
+            }
+            if (style == "caption" || style == "ticker" || style == "package") {
+                const bool package = style == "package";
+                title->addSeparator();
+                captionSet = title->addAction(package ? tr("Set Title Text…")
+                                                      : tr("Set Subtitle Text…"));
+                captionPrev = title->addAction(package ? tr("Previous Caption")
+                                                       : tr("Previous Subtitle"));
+                captionNext = title->addAction(package ? tr("Next Caption")
+                                                       : tr("Next Subtitle"));
+                captionClear = title->addAction(package ? tr("Clear Title Text")
+                                                        : tr("Clear Subtitle"));
+            }
         }
 
         properties = menu.addAction(tr("Input Properties…"));
@@ -497,6 +557,12 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
         emit overlayClearRequested(id);
     } else if (overlayLayers.contains(chosen)) {
         emit overlayAssignRequested(id, overlayLayers.indexOf(chosen) + 1);
+    } else if (chosen == chromaOff) {
+        emit chromaKeyRequested(id, "off");
+    } else if (chosen == chromaGreen) {
+        emit chromaKeyRequested(id, "green");
+    } else if (chosen == chromaBlue) {
+        emit chromaKeyRequested(id, "blue");
     } else if (chosen == titleStart) {
         emit titleActionRequested(id, "countdownStart");
     } else if (chosen == titlePause) {
@@ -511,6 +577,24 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
         emit titleActionRequested(id, "awayPlus");
     } else if (chosen == awayMinus) {
         emit titleActionRequested(id, "awayMinus");
+    } else if (chosen == captionSet) {
+        emit titleActionRequested(id, "captionSet");
+    } else if (chosen == captionNext) {
+        emit titleActionRequested(id, "captionNext");
+    } else if (chosen == captionPrev) {
+        emit titleActionRequested(id, "captionPrev");
+    } else if (chosen == captionClear) {
+        emit titleActionRequested(id, "captionClear");
+    } else if (chosen == titleElements) {
+        emit titleActionRequested(id, "elements");
+    } else if (chosen == presetSave) {
+        emit titleActionRequested(id, "presetSave");
+    } else if (chosen == presetNext) {
+        emit titleActionRequested(id, "presetNext");
+    } else if (chosen == presetPrev) {
+        emit titleActionRequested(id, "presetPrev");
+    } else if (chosen == presetClear) {
+        emit titleActionRequested(id, "presetClear");
     } else if (chosen == properties) {
         emit propertiesRequested(id);
     } else if (chosen == remove) {
