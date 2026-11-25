@@ -1,11 +1,15 @@
 #include "mixvera/ui/input_panel.hpp"
 
+#include <QButtonGroup>
+#include <QContextMenuEvent>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QListWidget>
+#include <QLineEdit>
 #include <QMenu>
-#include <QPainter>
-#include <QStyledItemDelegate>
+#include <QMouseEvent>
+#include <QPixmap>
+#include <QScrollArea>
+#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -13,88 +17,10 @@ namespace mixvera::ui {
 
 namespace {
 
-constexpr int kRowHeight = 64;
-constexpr int kThumbWidth = 96;
-constexpr int kThumbHeight = 54;
-
-class InputDelegate final : public QStyledItemDelegate {
-public:
-    using QStyledItemDelegate::QStyledItemDelegate;
-
-    QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const override
-    {
-        return QSize(160, kRowHeight);
-    }
-
-    void paint(QPainter* painter, const QStyleOptionViewItem& option,
-        const QModelIndex& index) const override
-    {
-        painter->save();
-        painter->setRenderHint(QPainter::Antialiasing, true);
-        painter->setRenderHint(QPainter::TextAntialiasing, true);
-
-        const QRect row = option.rect.adjusted(0, 0, 0, -1);
-        const bool selected = option.state & QStyle::State_Selected;
-        painter->fillRect(row, selected ? QColor("#284CB8") : QColor("#1D1F26"));
-
-        const QRect thumb(row.left() + 6, row.top() + 5, kThumbWidth, kThumbHeight);
-        painter->fillRect(thumb, QColor("#0B0D12"));
-        const QIcon icon = qvariant_cast<QIcon>(index.data(Qt::DecorationRole));
-        if (!icon.isNull()) {
-            icon.paint(painter, thumb, Qt::AlignCenter, QIcon::Normal, QIcon::Off);
-        } else {
-            painter->setPen(QColor("#3C404D"));
-            painter->drawRect(thumb.adjusted(0, 0, -1, -1));
-            painter->setPen(QColor("#646464"));
-            painter->setFont(QFont(QStringLiteral("Segoe UI"), 8));
-            painter->drawText(thumb, Qt::AlignCenter, QStringLiteral("NO FRAME"));
-        }
-
-        const int textLeft = thumb.right() + 10;
-        const int number = index.row() + 1;
-        painter->setFont(QFont(QStringLiteral("Consolas"), 9, QFont::Bold));
-        painter->setPen(selected ? QColor("#DCE4FF") : QColor("#8FA6E8"));
-        painter->drawText(QRect(textLeft, row.top() + 6, 22, 16),
-            Qt::AlignLeft | Qt::AlignVCenter, QString::number(number).rightJustified(2, '0'));
-
-        const QString status = index.data(Qt::UserRole + 2).toString();
-        const QString name = index.data(Qt::DisplayRole).toString();
-        const QString kind = index.data(Qt::UserRole + 1).toString();
-
-        QFont nameFont(QStringLiteral("Segoe UI"), 10, QFont::DemiBold);
-        painter->setFont(nameFont);
-        painter->setPen(QColor("#E9ECF2"));
-        painter->drawText(QRect(textLeft + 24, row.top() + 4, row.width() - textLeft - 120, 18),
-            Qt::AlignLeft | Qt::AlignVCenter,
-            painter->fontMetrics().elidedText(name, Qt::ElideRight,
-                row.width() - textLeft - 120));
-
-        painter->setFont(QFont(QStringLiteral("Segoe UI"), 8));
-        painter->setPen(selected ? QColor("#C9D3F5") : QColor("#969696"));
-        painter->drawText(QRect(textLeft + 24, row.top() + 22, row.width() - textLeft - 120, 16),
-            Qt::AlignLeft | Qt::AlignVCenter, kind);
-
-        if (index.data(Qt::UserRole + 4).toBool()) {
-            painter->setFont(QFont(QStringLiteral("Segoe UI"), 8, QFont::Bold));
-            painter->setPen(QColor("#E85E75"));
-            painter->drawText(QRect(textLeft + 24, row.top() + 40, 40, 14),
-                Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("MUTE"));
-        }
-
-        if (!status.isEmpty()) {
-            const bool program = status == "PGM";
-            const QRect pill(row.right() - 74, row.top() + 8, 64, 16);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(program ? QColor("#C01C37") : QColor("#25A231"));
-            painter->drawRoundedRect(pill, 2, 2);
-            painter->setPen(QColor("#FFFFFF"));
-            painter->setFont(QFont(QStringLiteral("Segoe UI"), 8, QFont::Bold));
-            painter->drawText(pill, Qt::AlignCenter, status);
-        }
-
-        painter->restore();
-    }
-};
+constexpr int kTileWidth = 190;
+constexpr int kTileHeight = 164;
+constexpr int kThumbWidth = 182;
+constexpr int kThumbHeight = 102;
 
 QLabel* dockTitle(const QString& text, QWidget* parent)
 {
@@ -105,74 +31,244 @@ QLabel* dockTitle(const QString& text, QWidget* parent)
 
 } // namespace
 
+class InputTile final : public QFrame {
+    Q_OBJECT
+
+public:
+    InputTile(const core::InputDescriptor& input, int number, const QString& kind,
+        QWidget* parent)
+        : QFrame(parent)
+        , id_(QString::fromStdString(input.id))
+        , name_(QString::fromStdString(input.name))
+        , kind_(kind)
+    {
+        setObjectName("inputTile");
+        setProperty("selected", false);
+        setFixedSize(kTileWidth, kTileHeight);
+        setCursor(Qt::PointingHandCursor);
+        setToolTip(QStringLiteral("%1 · %2").arg(name_, kind_));
+
+        auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(4, 4, 4, 4);
+        layout->setSpacing(3);
+
+        header_ = new QLabel(this);
+        header_->setObjectName("inputTileHeader");
+        header_->setFixedHeight(22);
+        header_->setContentsMargins(5, 0, 5, 0);
+        header_->setText(QStringLiteral("%1  %2").arg(number).arg(
+            header_->fontMetrics().elidedText(name_, Qt::ElideRight, 132)));
+        layout->addWidget(header_);
+
+        thumb_ = new QLabel(this);
+        thumb_->setObjectName("inputTileThumb");
+        thumb_->setFixedSize(kThumbWidth, kThumbHeight);
+        thumb_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(thumb_);
+
+        auto* actions = new QHBoxLayout;
+        actions->setContentsMargins(0, 0, 0, 0);
+        actions->setSpacing(3);
+        auto* preview = actionButton(QStringLiteral("PVW"), tr("Set Preview"), 36);
+        auto* cut = actionButton(QStringLiteral("PGM"), tr("Cut to Program"), 36);
+        auto* addToScene = actionButton(QStringLiteral("+"), tr("Add to Current Scene"), 22);
+        auto* properties = actionButton(QStringLiteral("⚙"), tr("Input Properties…"), 22);
+        auto* remove = actionButton(QStringLiteral("×"), tr("Remove Input"), 20);
+        actions->addWidget(preview);
+        actions->addWidget(cut);
+        actions->addWidget(addToScene);
+        actions->addWidget(properties);
+        actions->addWidget(remove);
+        actions->addStretch(1);
+        layout->addLayout(actions);
+
+        connect(preview, &QToolButton::clicked, this,
+            [this] { emit previewRequested(id_); });
+        connect(cut, &QToolButton::clicked, this, [this] { emit cutRequested(id_); });
+        connect(addToScene, &QToolButton::clicked, this,
+            [this] { emit addToSceneRequested(id_); });
+        connect(properties, &QToolButton::clicked, this,
+            [this] { emit propertiesRequested(id_); });
+        connect(remove, &QToolButton::clicked, this, [this] { emit removeRequested(id_); });
+
+        setStatus(QString(), QString());
+    }
+
+    const QString& id() const { return id_; }
+
+    void setThumbnail(const QImage& image)
+    {
+        image_ = image;
+        if (image_.isNull()) {
+            thumb_->clear();
+            return;
+        }
+        thumb_->setPixmap(QPixmap::fromImage(image_.scaled(
+            QSize(kThumbWidth, kThumbHeight), Qt::KeepAspectRatio,
+            Qt::SmoothTransformation)));
+    }
+
+    void setStatus(const QString& programId, const QString& previewId)
+    {
+        const char* role = id_ == programId ? "program"
+            : (id_ == previewId ? "preview" : "idle");
+        header_->setProperty("role", QString::fromLatin1(role));
+        header_->style()->unpolish(header_);
+        header_->style()->polish(header_);
+    }
+
+    void setSelected(bool selected)
+    {
+        if (property("selected").toBool() == selected) {
+            return;
+        }
+        setProperty("selected", selected);
+        style()->unpolish(this);
+        style()->polish(this);
+    }
+
+signals:
+    void clicked(const QString& id);
+    void previewRequested(const QString& id);
+    void cutRequested(const QString& id);
+    void addToSceneRequested(const QString& id);
+    void propertiesRequested(const QString& id);
+    void removeRequested(const QString& id);
+    void contextMenuRequested(const QString& id, const QPoint& globalPos);
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            emit clicked(id_);
+        }
+        QFrame::mousePressEvent(event);
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            emit propertiesRequested(id_);
+        }
+        QFrame::mouseDoubleClickEvent(event);
+    }
+
+    void contextMenuEvent(QContextMenuEvent* event) override
+    {
+        emit contextMenuRequested(id_, event->globalPos());
+        event->accept();
+    }
+
+private:
+    QToolButton* actionButton(const QString& text, const QString& tip, int width)
+    {
+        auto* button = new QToolButton(this);
+        button->setObjectName("tileAction");
+        button->setText(text);
+        button->setToolTip(tip);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setAutoRaise(true);
+        button->setFixedSize(width, 22);
+        return button;
+    }
+
+    QString id_;
+    QString name_;
+    QString kind_;
+    QLabel* header_ = nullptr;
+    QLabel* thumb_ = nullptr;
+    QImage image_;
+};
+
 InputPanel::InputPanel(QWidget* parent)
     : QFrame(parent)
 {
-    setObjectName("dockPanel");
+    setObjectName("inputBar");
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(5);
+    root->setContentsMargins(8, 6, 8, 6);
+    root->setSpacing(4);
 
     auto* header = new QHBoxLayout;
     header->setSpacing(4);
     header->addWidget(dockTitle(tr("INPUTS"), this));
+    header->addSpacing(6);
+
+    auto* filters = new QButtonGroup(this);
+    filters->setExclusive(true);
+    struct FilterDef {
+        QString text;
+        Filter filter;
+    };
+    const FilterDef filterDefs[] = {
+        {tr("All"), Filter::All},
+        {tr("Scenes"), Filter::Scenes},
+        {tr("Capture"), Filter::Capture},
+        {tr("Media"), Filter::Media},
+    };
+    for (const auto& def : filterDefs) {
+        auto* button = new QToolButton(this);
+        button->setObjectName("filterChip");
+        button->setText(def.text);
+        button->setCheckable(true);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setProperty("filter", static_cast<int>(def.filter));
+        filters->addButton(button);
+        filterButtons_.push_back(button);
+        header->addWidget(button);
+        if (def.filter == Filter::All) {
+            button->setChecked(true);
+        }
+    }
+    // QButtonGroup::idClicked gives an index; map it back to the stored filter.
+    connect(filters, &QButtonGroup::idClicked, this, [this, filters](int id) {
+        auto* button = filters->button(id);
+        if (!button) {
+            return;
+        }
+        filter_ = static_cast<Filter>(button->property("filter").toInt());
+        applyFilter();
+    });
+
     header->addStretch();
+
+    search_ = new QLineEdit(this);
+    search_->setObjectName("inputSearch");
+    search_->setPlaceholderText(tr("Search inputs…"));
+    search_->setClearButtonEnabled(true);
+    search_->setFixedWidth(150);
+    header->addWidget(search_);
+
+    countLabel_ = new QLabel(this);
+    countLabel_->setObjectName("inputCount");
+    header->addWidget(countLabel_);
+
     auto* add = new QToolButton(this);
     add->setObjectName("dockButton");
-    add->setText("+ " + tr("Add Input"));
+    add->setText(QStringLiteral("+ ") + tr("Add Input"));
     add->setToolTip(tr("Add a capture, media or generated input"));
     add->setCursor(Qt::PointingHandCursor);
     header->addWidget(add);
     root->addLayout(header);
 
-    list_ = new QListWidget(this);
-    list_->setObjectName("inputList");
-    list_->setItemDelegate(new InputDelegate(list_));
-    list_->setSelectionMode(QAbstractItemView::SingleSelection);
-    list_->setUniformItemSizes(true);
-    list_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    list_->setContextMenuPolicy(Qt::CustomContextMenu);
-    root->addWidget(list_, 1);
+    scroll_ = new QScrollArea(this);
+    scroll_->setObjectName("inputScroll");
+    scroll_->setWidgetResizable(true);
+    scroll_->setFrameShape(QFrame::NoFrame);
+    scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll_->setMinimumHeight(kTileHeight + 14);
+
+    strip_ = new QWidget(scroll_);
+    strip_->setObjectName("inputStrip");
+    stripLayout_ = new QHBoxLayout(strip_);
+    stripLayout_->setContentsMargins(0, 0, 0, 0);
+    stripLayout_->setSpacing(6);
+    stripLayout_->addStretch(1);
+    scroll_->setWidget(strip_);
+    root->addWidget(scroll_, 1);
 
     connect(add, &QToolButton::clicked, this, &InputPanel::addInputRequested);
-
-    connect(list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
-        if (item) {
-            emit inputActivated(item->data(Qt::UserRole).toString());
-        }
-    });
-
-    connect(list_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& point) {
-        QListWidgetItem* item = list_->itemAt(point);
-        QMenu menu(this);
-        if (item) {
-            const QString id = item->data(Qt::UserRole).toString();
-            auto* preview = menu.addAction(tr("Set Preview"));
-            auto* cut = menu.addAction(tr("Cut to Program"));
-            menu.addSeparator();
-            auto* addToScene = menu.addAction(tr("Add to Current Scene"));
-            auto* properties = menu.addAction(tr("Input Properties…"));
-            menu.addSeparator();
-            auto* remove = menu.addAction(tr("Remove Input"));
-            QAction* chosen = menu.exec(list_->mapToGlobal(point));
-            if (chosen == preview) {
-                emit previewRequested(id);
-            } else if (chosen == cut) {
-                emit cutRequested(id);
-            } else if (chosen == addToScene) {
-                emit addToSceneRequested(id);
-            } else if (chosen == properties) {
-                emit propertiesRequested(id);
-            } else if (chosen == remove) {
-                emit removeRequested(id);
-            }
-        } else {
-            auto* addAction = menu.addAction(tr("Add Input…"));
-            if (menu.exec(list_->mapToGlobal(point)) == addAction) {
-                emit addInputRequested();
-            }
-        }
-    });
+    connect(search_, &QLineEdit::textChanged, this, [this] { applyFilter(); });
 }
 
 void InputPanel::setInputs(const std::vector<core::InputDescriptor>& inputs)
@@ -183,38 +279,101 @@ void InputPanel::setInputs(const std::vector<core::InputDescriptor>& inputs)
 
 void InputPanel::rebuild()
 {
-    const QString current = list_->currentItem()
-        ? list_->currentItem()->data(Qt::UserRole).toString()
-        : QString();
+    while (QLayoutItem* item = stripLayout_->takeAt(0)) {
+        if (QWidget* widget = item->widget()) {
+            widget->deleteLater();
+        }
+        delete item;
+    }
+    tiles_.clear();
+    tileOrder_.clear();
 
-    QSignalBlocker blocker(list_);
-    list_->clear();
+    int number = 1;
     for (const auto& input : inputs_) {
         const QString id = QString::fromStdString(input.id);
-        QString status;
-        if (input.id == programId_) {
-            status = "PGM";
-        } else if (input.id == previewId_) {
-            status = "PVW";
-        }
-
-        auto* item = new QListWidgetItem(QString::fromStdString(input.name), list_);
-        item->setData(Qt::UserRole, id);
-        item->setData(Qt::UserRole + 1, QString::fromLatin1(core::inputKindLabel(input.kind)));
-        item->setData(Qt::UserRole + 2, status);
-        item->setData(Qt::UserRole + 3, input.hasAudio);
-        item->setData(Qt::UserRole + 4, input.muted);
-        item->setSizeHint(QSize(0, kRowHeight));
+        auto* tile = new InputTile(input, number++, kindLabel(input.kind), strip_);
         if (thumbnails_.contains(id)) {
-            item->setIcon(thumbnails_.value(id));
+            tile->setThumbnail(thumbnails_.value(id));
         }
-        if (!current.isEmpty() && id == current) {
-            list_->setCurrentItem(item);
+        tile->setStatus(QString::fromStdString(programId_),
+            QString::fromStdString(previewId_));
+        stripLayout_->addWidget(tile);
+        tiles_.insert(id, tile);
+        tileOrder_.push_back(tile);
+
+        connect(tile, &InputTile::clicked, this, [this](const QString& inputId) {
+            selectedId_ = inputId.toStdString();
+            updateSelection();
+            emit previewRequested(inputId);
+        });
+        connect(tile, &InputTile::previewRequested, this, &InputPanel::previewRequested);
+        connect(tile, &InputTile::cutRequested, this, &InputPanel::cutRequested);
+        connect(tile, &InputTile::addToSceneRequested, this,
+            &InputPanel::addToSceneRequested);
+        connect(tile, &InputTile::propertiesRequested, this,
+            &InputPanel::propertiesRequested);
+        connect(tile, &InputTile::removeRequested, this, &InputPanel::removeRequested);
+        connect(tile, &InputTile::contextMenuRequested, this,
+            [this](const QString& inputId, const QPoint& globalPos) {
+                showContextMenu(inputId, globalPos);
+            });
+    }
+
+    if (inputs_.empty()) {
+        auto* empty = new QLabel(tr("No inputs yet. Use Add Input to get started."), strip_);
+        empty->setObjectName("inputEmpty");
+        stripLayout_->addWidget(empty);
+    }
+    stripLayout_->addStretch(1);
+
+    if (!selectedId_.empty() && !tiles_.contains(QString::fromStdString(selectedId_))) {
+        selectedId_.clear();
+    }
+    updateSelection();
+    applyFilter();
+}
+
+void InputPanel::applyFilter()
+{
+    const QString query = search_ ? search_->text().trimmed() : QString();
+    int visible = 0;
+    for (const auto& input : inputs_) {
+        auto* tile = tiles_.value(QString::fromStdString(input.id), nullptr);
+        if (!tile) {
+            continue;
+        }
+        const bool textMatch = query.isEmpty()
+            || QString::fromStdString(input.name).contains(query, Qt::CaseInsensitive);
+        const bool show = textMatch && matchesFilter(input);
+        tile->setVisible(show);
+        if (show) {
+            ++visible;
         }
     }
-    if (!list_->currentItem() && list_->count() > 0) {
-        list_->setCurrentRow(0);
+    if (countLabel_) {
+        countLabel_->setText(tr("%1 inputs").arg(visible));
     }
+}
+
+bool InputPanel::matchesFilter(const core::InputDescriptor& input) const
+{
+    switch (filter_) {
+    case Filter::All:
+        return true;
+    case Filter::Scenes:
+        return input.kind == core::InputKind::Scene;
+    case Filter::Capture:
+        return input.kind == core::InputKind::ScreenCapture
+            || input.kind == core::InputKind::WindowCapture
+            || input.kind == core::InputKind::Camera;
+    case Filter::Media:
+        return input.kind == core::InputKind::Image
+            || input.kind == core::InputKind::MediaFile
+            || input.kind == core::InputKind::Title
+            || input.kind == core::InputKind::Color
+            || input.kind == core::InputKind::TestPattern;
+    }
+    return true;
 }
 
 void InputPanel::setThumbnail(const std::string& id, const QImage& image)
@@ -223,17 +382,9 @@ void InputPanel::setThumbnail(const std::string& id, const QImage& image)
     if (image.isNull()) {
         return;
     }
-    const QIcon icon(QPixmap::fromImage(image));
-    if (thumbnails_.value(key).cacheKey() == icon.cacheKey()) {
-        return;
-    }
-    thumbnails_.insert(key, icon);
-    for (int row = 0; row < list_->count(); ++row) {
-        auto* item = list_->item(row);
-        if (item->data(Qt::UserRole).toString() == key) {
-            item->setIcon(icon);
-            break;
-        }
+    thumbnails_.insert(key, image);
+    if (auto* tile = tiles_.value(key, nullptr)) {
+        tile->setThumbnail(image);
     }
 }
 
@@ -244,24 +395,100 @@ void InputPanel::setProgramPreview(const std::string& programId, const std::stri
     }
     programId_ = programId;
     previewId_ = previewId;
-    rebuild();
+    for (auto* tile : tileOrder_) {
+        tile->setStatus(QString::fromStdString(programId_), QString::fromStdString(previewId_));
+    }
 }
 
 std::string InputPanel::selectedId() const
 {
-    const auto* item = list_->currentItem();
-    return item ? item->data(Qt::UserRole).toString().toStdString() : std::string();
+    return selectedId_;
 }
 
 void InputPanel::selectInput(const std::string& id)
 {
-    for (int row = 0; row < list_->count(); ++row) {
-        auto* item = list_->item(row);
-        if (item->data(Qt::UserRole).toString().toStdString() == id) {
-            list_->setCurrentItem(item);
-            return;
+    selectedId_ = id;
+    updateSelection();
+}
+
+int InputPanel::count() const
+{
+    return static_cast<int>(inputs_.size());
+}
+
+void InputPanel::updateSelection()
+{
+    for (auto* tile : tileOrder_) {
+        tile->setSelected(tile->id() == QString::fromStdString(selectedId_));
+    }
+}
+
+void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
+{
+    QMenu menu(this);
+    QAction* preview = nullptr;
+    QAction* cut = nullptr;
+    QAction* addToScene = nullptr;
+    QAction* properties = nullptr;
+    QAction* remove = nullptr;
+    if (!id.isEmpty()) {
+        preview = menu.addAction(tr("Set Preview"));
+        cut = menu.addAction(tr("Cut to Program"));
+        menu.addSeparator();
+        addToScene = menu.addAction(tr("Add to Current Scene"));
+        properties = menu.addAction(tr("Input Properties…"));
+        menu.addSeparator();
+        remove = menu.addAction(tr("Remove Input"));
+    } else {
+        preview = menu.addAction(tr("Add Input…"));
+    }
+    QAction* chosen = menu.exec(globalPos);
+    if (!chosen) {
+        return;
+    }
+    if (chosen == preview) {
+        if (id.isEmpty()) {
+            emit addInputRequested();
+        } else {
+            emit previewRequested(id);
         }
+    } else if (chosen == cut) {
+        emit cutRequested(id);
+    } else if (chosen == addToScene) {
+        emit addToSceneRequested(id);
+    } else if (chosen == properties) {
+        emit propertiesRequested(id);
+    } else if (chosen == remove) {
+        emit removeRequested(id);
+    }
+}
+
+QString InputPanel::kindLabel(core::InputKind kind)
+{
+    switch (kind) {
+    case core::InputKind::Scene:
+        return tr("Scene");
+    case core::InputKind::TestPattern:
+        return tr("Test Pattern");
+    case core::InputKind::ScreenCapture:
+        return tr("Screen Capture");
+    case core::InputKind::WindowCapture:
+        return tr("Window Capture");
+    case core::InputKind::Camera:
+        return tr("Camera");
+    case core::InputKind::Image:
+        return tr("Image");
+    case core::InputKind::MediaFile:
+        return tr("Media File");
+    case core::InputKind::Title:
+        return tr("Title");
+    case core::InputKind::Color:
+        return tr("Colour");
+    default:
+        return tr("Input");
     }
 }
 
 } // namespace mixvera::ui
+
+#include "input_panel.moc"

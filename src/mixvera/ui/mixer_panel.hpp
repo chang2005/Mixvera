@@ -13,8 +13,9 @@ class QScrollArea;
 
 namespace mixvera::ui {
 
-/// Audio mixer dock. Faders, mute and the master meter; the meter is driven by
-/// a real capture device when one is available.
+/// vMix style audio mixer dock on the right of the monitors. Vertical channel
+/// rows, mute and the master meter; the meter is driven by a real capture
+/// device when one is available.
 class MixerPanel final : public QFrame {
     Q_OBJECT
 
@@ -40,6 +41,7 @@ private:
     std::vector<core::InputDescriptor> inputs_;
     std::vector<core::AudioChannelState> channels_;
     QWidget* masterMeter_ = nullptr;
+    QLabel* masterDb_ = nullptr;
 };
 
 } // namespace mixvera::ui

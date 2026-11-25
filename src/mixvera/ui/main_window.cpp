@@ -18,6 +18,7 @@
 #include "mixvera/ui/theme.hpp"
 #include "mixvera/ui/transition_bar.hpp"
 
+#include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDateTime>
@@ -29,9 +30,11 @@
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
+#include <QLocale>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSettings>
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -109,6 +112,9 @@ struct MainWindow::Impl {
     InputPanel* inputsPanel = nullptr;
     MixerPanel* mixer = nullptr;
     StatusBar* status = nullptr;
+    QSplitter* workspace = nullptr;
+    QToolButton* scenesToggle = nullptr;
+    QToolButton* mixerToggle = nullptr;
 
     QLabel* projectLabel = nullptr;
     QLabel* recPill = nullptr;
@@ -138,9 +144,9 @@ MainWindow::MainWindow(bool restoreSession, QWidget* parent)
     : QMainWindow(parent)
     , impl_(std::make_unique<Impl>())
 {
-    setWindowTitle(tr("Mixvera 0.2 — Live Production Switcher"));
+    setWindowTitle(tr("Mixvera 0.3 — Live Production Switcher"));
     resize(1600, 960);
-    setMinimumSize(1180, 700);
+    setMinimumSize(1280, 760);
     setStyleSheet(theme::applicationStyleSheet());
 
     auto& app = core::Application::instance();
@@ -209,10 +215,10 @@ void MainWindow::buildLayout()
 
     auto* top = new QFrame(root);
     top->setObjectName("topBar");
-    top->setFixedHeight(54);
+    top->setFixedHeight(52);
     auto* topLayout = new QHBoxLayout(top);
-    topLayout->setContentsMargins(12, 6, 12, 6);
-    topLayout->setSpacing(10);
+    topLayout->setContentsMargins(10, 6, 10, 6);
+    topLayout->setSpacing(8);
 
     auto* mark = makeLabel("M", "brandMark", top);
     mark->setFixedSize(32, 32);
@@ -222,50 +228,52 @@ void MainWindow::buildLayout()
     auto* titles = new QVBoxLayout;
     titles->setSpacing(0);
     titles->addWidget(makeLabel("MIXVERA", "brandTitle", top));
-    titles->addWidget(makeLabel("LIVE PRODUCTION SWITCHER", "brandSubtitle", top));
+    titles->addWidget(makeLabel(tr("LIVE PRODUCTION SWITCHER"), "brandSubtitle", top));
     topLayout->addLayout(titles);
 
     impl_->projectLabel = makeLabel("", "projectName", top);
-    topLayout->addSpacing(12);
+    topLayout->addSpacing(10);
     topLayout->addWidget(impl_->projectLabel);
     topLayout->addStretch();
 
-    auto* addInput = new QPushButton(tr("Add Input"), top);
-    addInput->setToolTip(tr("Add a capture, media or generated input"));
+    impl_->scenesToggle = new QToolButton(top);
+    impl_->scenesToggle->setObjectName("topToggle");
+    impl_->scenesToggle->setText(tr("Scenes"));
+    impl_->scenesToggle->setCheckable(true);
+    impl_->scenesToggle->setToolTip(tr("Show or hide the scenes and sources panel"));
+    impl_->scenesToggle->setCursor(Qt::PointingHandCursor);
+    topLayout->addWidget(impl_->scenesToggle);
+
+    impl_->mixerToggle = new QToolButton(top);
+    impl_->mixerToggle->setObjectName("topToggle");
+    impl_->mixerToggle->setText(tr("Audio Mixer"));
+    impl_->mixerToggle->setCheckable(true);
+    impl_->mixerToggle->setToolTip(tr("Show or hide the audio mixer"));
+    impl_->mixerToggle->setCursor(Qt::PointingHandCursor);
+    topLayout->addWidget(impl_->mixerToggle);
+
     auto* settings = new QPushButton(tr("Settings"), top);
+    settings->setObjectName("topButton");
     auto* fullscreen = new QPushButton(tr("Fullscreen"), top);
-    topLayout->addWidget(addInput);
+    fullscreen->setObjectName("topButton");
     topLayout->addWidget(settings);
     topLayout->addWidget(fullscreen);
-    topLayout->addSpacing(10);
+    topLayout->addSpacing(8);
 
     impl_->recPill = makeLabel(tr("REC 00:00"), "pillRec", top);
     impl_->streamPill = makeLabel(tr("STREAM 00:00"), "pillStream", top);
     topLayout->addWidget(impl_->recPill);
     topLayout->addWidget(impl_->streamPill);
-
-    impl_->recordButton = new QPushButton(tr("RECORD"), top);
-    impl_->recordButton->setObjectName("recordButton");
-    impl_->recordButton->setCheckable(true);
-    impl_->recordButton->setToolTip(tr("Start / stop recording to disk (Ctrl+R)"));
-
-    impl_->streamButton = new QPushButton(tr("STREAM"), top);
-    impl_->streamButton->setObjectName("streamButton");
-    impl_->streamButton->setCheckable(true);
-    impl_->streamButton->setToolTip(tr("Start / stop the RTMP push"));
-
-    topLayout->addWidget(impl_->recordButton);
-    topLayout->addWidget(impl_->streamButton);
     layout->addWidget(top);
 
-    auto* splitter = new QSplitter(Qt::Horizontal, root);
-    splitter->setChildrenCollapsible(false);
+    impl_->workspace = new QSplitter(Qt::Horizontal, root);
+    impl_->workspace->setChildrenCollapsible(false);
 
-    impl_->scenes = new ScenePanel(splitter);
-    impl_->scenes->setMinimumWidth(210);
-    impl_->scenes->setMaximumWidth(340);
+    impl_->scenes = new ScenePanel(impl_->workspace);
+    impl_->scenes->setMinimumWidth(220);
+    impl_->scenes->setMaximumWidth(320);
 
-    auto* center = new QWidget(splitter);
+    auto* center = new QWidget(impl_->workspace);
     auto* centerLayout = new QVBoxLayout(center);
     centerLayout->setContentsMargins(6, 6, 6, 6);
     centerLayout->setSpacing(6);
@@ -273,45 +281,80 @@ void MainWindow::buildLayout()
     auto* monitors = new QHBoxLayout;
     monitors->setSpacing(6);
 
-    auto* programFrame = new QFrame(center);
-    programFrame->setObjectName("monitorFrame");
-    programFrame->setProperty("role", "program");
-    auto* programLayout = new QVBoxLayout(programFrame);
-    programLayout->setContentsMargins(3, 3, 3, 3);
-    impl_->program = new StageView(StageView::Role::Program, programFrame);
-    programLayout->addWidget(impl_->program);
-
+    // vMix places preview on the left (orange) and program on the right
+    // (green), with the transition cluster between them.
     auto* previewFrame = new QFrame(center);
     previewFrame->setObjectName("monitorFrame");
     previewFrame->setProperty("role", "preview");
     auto* previewLayout = new QVBoxLayout(previewFrame);
-    previewLayout->setContentsMargins(3, 3, 3, 3);
+    previewLayout->setContentsMargins(1, 1, 1, 1);
     impl_->preview = new StageView(StageView::Role::Preview, previewFrame);
     previewLayout->addWidget(impl_->preview);
 
-    monitors->addWidget(programFrame, 2);
+    impl_->transitionBar = new TransitionBar(center);
+
+    auto* programFrame = new QFrame(center);
+    programFrame->setObjectName("monitorFrame");
+    programFrame->setProperty("role", "program");
+    auto* programLayout = new QVBoxLayout(programFrame);
+    programLayout->setContentsMargins(1, 1, 1, 1);
+    impl_->program = new StageView(StageView::Role::Program, programFrame);
+    programLayout->addWidget(impl_->program);
+
     monitors->addWidget(previewFrame, 1);
+    monitors->addWidget(impl_->transitionBar, 0, Qt::AlignVCenter);
+    monitors->addWidget(programFrame, 1);
     centerLayout->addLayout(monitors, 1);
 
-    impl_->transitionBar = new TransitionBar(center);
-    centerLayout->addWidget(impl_->transitionBar);
+    impl_->mixer = new MixerPanel(impl_->workspace);
+    impl_->mixer->setMinimumWidth(250);
+    impl_->mixer->setMaximumWidth(330);
 
-    impl_->mixer = new MixerPanel(center);
-    impl_->mixer->setFixedHeight(148);
-    centerLayout->addWidget(impl_->mixer);
+    impl_->workspace->addWidget(impl_->scenes);
+    impl_->workspace->addWidget(center);
+    impl_->workspace->addWidget(impl_->mixer);
+    impl_->workspace->setStretchFactor(0, 0);
+    impl_->workspace->setStretchFactor(1, 1);
+    impl_->workspace->setStretchFactor(2, 0);
+    impl_->workspace->setSizes({0, 1500, 0});
+    impl_->scenes->hide();
+    impl_->mixer->hide();
+    layout->addWidget(impl_->workspace, 1);
 
-    impl_->inputsPanel = new InputPanel(splitter);
-    impl_->inputsPanel->setMinimumWidth(250);
-    impl_->inputsPanel->setMaximumWidth(360);
+    impl_->inputsPanel = new InputPanel(root);
+    impl_->inputsPanel->setFixedHeight(212);
+    layout->addWidget(impl_->inputsPanel);
 
-    splitter->addWidget(impl_->scenes);
-    splitter->addWidget(center);
-    splitter->addWidget(impl_->inputsPanel);
-    splitter->setStretchFactor(0, 0);
-    splitter->setStretchFactor(1, 1);
-    splitter->setStretchFactor(2, 0);
-    splitter->setSizes({245, 1040, 310});
-    layout->addWidget(splitter, 1);
+    auto* footer = new QFrame(root);
+    footer->setObjectName("footerBar");
+    footer->setFixedHeight(54);
+    auto* footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(10, 7, 10, 7);
+    footerLayout->setSpacing(8);
+
+    auto* addInput = new QPushButton(QStringLiteral("+ ") + tr("Add Input"), footer);
+    addInput->setObjectName("footerButton");
+    addInput->setToolTip(tr("Add a capture, media or generated input"));
+    addInput->setCursor(Qt::PointingHandCursor);
+    footerLayout->addWidget(addInput);
+
+    impl_->recordButton = new QPushButton(tr("Record"), footer);
+    impl_->recordButton->setObjectName("recordButton");
+    impl_->recordButton->setCheckable(true);
+    impl_->recordButton->setToolTip(tr("Start / stop recording to disk (Ctrl+R)"));
+    footerLayout->addWidget(impl_->recordButton);
+
+    impl_->streamButton = new QPushButton(tr("Stream"), footer);
+    impl_->streamButton->setObjectName("streamButton");
+    impl_->streamButton->setCheckable(true);
+    impl_->streamButton->setToolTip(tr("Start / stop the RTMP push"));
+    footerLayout->addWidget(impl_->streamButton);
+
+    auto* hint = makeLabel(tr("SPACE cut · ENTER transition · F11 fullscreen"),
+        "footerHint", footer);
+    footerLayout->addStretch();
+    footerLayout->addWidget(hint);
+    layout->addWidget(footer);
 
     setCentralWidget(root);
 
@@ -322,6 +365,40 @@ void MainWindow::buildLayout()
     connect(settings, &QPushButton::clicked, this, &MainWindow::onSettings);
     connect(fullscreen, &QPushButton::clicked, this, [this] {
         isFullScreen() ? showNormal() : showFullScreen();
+    });
+
+    connect(impl_->scenesToggle, &QToolButton::toggled, this, [this](bool visible) {
+        impl_->scenes->setVisible(visible);
+        if (!visible || impl_->workspace->width() <= 0) {
+            return;
+        }
+        auto sizes = impl_->workspace->sizes();
+        if (sizes.size() != 3) {
+            sizes = {240, 1000, 0};
+        }
+        sizes[0] = std::clamp(impl_->workspace->width() / 6, 220, 300);
+        if (!impl_->mixer->isVisible()) {
+            sizes[2] = 0;
+        }
+        sizes[1] = std::max(520, impl_->workspace->width() - sizes[0] - sizes[2]);
+        impl_->workspace->setSizes(sizes);
+    });
+
+    connect(impl_->mixerToggle, &QToolButton::toggled, this, [this](bool visible) {
+        impl_->mixer->setVisible(visible);
+        if (!visible || impl_->workspace->width() <= 0) {
+            return;
+        }
+        auto sizes = impl_->workspace->sizes();
+        if (sizes.size() != 3) {
+            sizes = {0, 1200, 280};
+        }
+        sizes[2] = std::clamp(impl_->workspace->width() / 6, 260, 320);
+        if (!impl_->scenes->isVisible()) {
+            sizes[0] = 0;
+        }
+        sizes[1] = std::max(520, impl_->workspace->width() - sizes[0] - sizes[2]);
+        impl_->workspace->setSizes(sizes);
     });
 }
 
@@ -361,6 +438,20 @@ void MainWindow::buildMenus()
     file->addSeparator();
     file->addAction(tr("E&xit"), QKeySequence::Quit, this, &QWidget::close);
 
+    auto* view = menuBar()->addMenu(tr("&View"));
+    auto* scenesAction = view->addAction(tr("Scenes && Sources"));
+    scenesAction->setCheckable(true);
+    connect(scenesAction, &QAction::toggled, impl_->scenesToggle, &QToolButton::setChecked);
+    connect(impl_->scenesToggle, &QToolButton::toggled, scenesAction, &QAction::setChecked);
+    auto* mixerAction = view->addAction(tr("Audio Mixer"));
+    mixerAction->setCheckable(true);
+    connect(mixerAction, &QAction::toggled, impl_->mixerToggle, &QToolButton::setChecked);
+    connect(impl_->mixerToggle, &QToolButton::toggled, mixerAction, &QAction::setChecked);
+    view->addSeparator();
+    view->addAction(tr("Toggle Fullscreen"), this, [this] {
+        isFullScreen() ? showNormal() : showFullScreen();
+    });
+
     auto* scene = menuBar()->addMenu(tr("&Scene"));
     scene->addAction(tr("Add Scene"), this, &MainWindow::onSceneAdd);
     scene->addAction(tr("Duplicate Scene"), this, &MainWindow::onSceneDuplicate);
@@ -386,11 +477,13 @@ void MainWindow::buildMenus()
     auto* help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("&About Mixvera"), this, [this] {
         QMessageBox::about(this, tr("About Mixvera"),
-            tr("<h3>Mixvera 0.2</h3>"
+            tr("<h3>Mixvera 0.3</h3>"
                "<p>Live production switcher: scene based compositing, real capture "
                "inputs, CUT / AUTO / T-Bar transitions and ffmpeg recording.</p>"
-               "<p>Interface language follows OBS Studio (dark docks, scenes and sources) "
-               "and vMix (PGM/PVW monitors, input thumbnails, transition cluster).</p>"));
+               "<p>The workspace follows vMix: preview on the left, program on the "
+               "right and a vertical transition cluster between them. The input "
+               "bar and footer keep the show controls within one click.</p>"
+               "<p>The interface is available in Simplified Chinese and English.</p>"));
     });
 }
 
@@ -496,6 +589,31 @@ QString MainWindow::projectPath() const
 void MainWindow::applyProject(core::Project project)
 {
     impl_->project = std::move(project);
+
+    // The bundled welcome project keeps stable ids but its display names follow
+    // the interface language. Match both the English source and the translated
+    // form so switching zh_CN → en also restores the default names. User-renamed
+    // inputs are left untouched because their names no longer match either form.
+    const auto localizedName = [this](const std::string& name) {
+        const QString value = QString::fromStdString(name);
+        const QString translations[] = {
+            tr("Welcome"), tr("Camera 1"), tr("Camera 2"),
+            tr("Mixvera Title"), tr("Scene 1"), tr("Scene 2"),
+        };
+        const char* sources[] = {
+            "Welcome", "Camera 1", "Camera 2", "Mixvera Title", "Scene 1", "Scene 2",
+        };
+        for (int index = 0; index < 6; ++index) {
+            if (value == QLatin1String(sources[index]) || value == translations[index]) {
+                return translations[index].toStdString();
+            }
+        }
+        return name;
+    };
+    impl_->project.name = localizedName(impl_->project.name);
+    for (auto& input : impl_->project.inputs) {
+        input.name = localizedName(input.name);
+    }
 
     impl_->compositor->setCanvasSize(QSize(impl_->project.canvasWidth,
         impl_->project.canvasHeight));
@@ -806,7 +924,7 @@ void MainWindow::onSceneDuplicate()
     }
     core::InputDescriptor copy = *current;
     copy.id = impl_->inputService->uniqueId("scene");
-    copy.name = current->name + " copy";
+    copy.name = tr("%1 copy").arg(QString::fromStdString(current->name)).toStdString();
     impl_->inputService->add(copy);
     impl_->selectedSceneId = copy.id;
     refreshPanels();
@@ -978,7 +1096,7 @@ void MainWindow::onAddInput()
     const QString prefix = kindPrefix(descriptor.kind);
     descriptor.id = impl_->inputService->uniqueId(prefix.toStdString());
     if (descriptor.name.empty()) {
-        descriptor.name = core::inputKindLabel(descriptor.kind);
+        descriptor.name = InputPanel::kindLabel(descriptor.kind).toStdString();
     }
 
     impl_->inputService->add(descriptor);
@@ -1188,13 +1306,32 @@ void MainWindow::onStreamToggled(bool start)
 
 void MainWindow::onSettings()
 {
+    QSettings settings;
+    // main.cpp resolves CLI / environment / settings / system locale and stores
+    // the winner on the application; show that same choice here.
+    QString language = QCoreApplication::instance()->property("mixvera/language").toString();
+    if (language.isEmpty()) {
+        language = settings.value("ui/language").toString();
+    }
+    if (language.isEmpty()) {
+        language = QLocale::system().language() == QLocale::Chinese ? "zh_CN" : "en";
+    }
+
     SettingsDialog dialog(this);
     dialog.setValues(impl_->project.canvasWidth, impl_->project.canvasHeight,
         impl_->project.fps, QString::fromStdString(impl_->project.outputs.recordingDirectory),
         QString::fromStdString(impl_->project.outputs.streamUrl),
         QString::fromStdString(impl_->project.outputs.streamKey));
+    dialog.setLanguage(language);
     if (dialog.exec() != QDialog::Accepted) {
         return;
+    }
+
+    const QString newLanguage = dialog.language();
+    if (!newLanguage.isEmpty() && newLanguage != language) {
+        settings.setValue("ui/language", newLanguage);
+        QMessageBox::information(this, tr("Interface Language"),
+            tr("The interface language will change the next time Mixvera starts."));
     }
 
     impl_->project.canvasWidth = dialog.canvasWidth();

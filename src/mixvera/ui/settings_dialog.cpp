@@ -52,6 +52,11 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     }
     fps_->setCurrentIndex(fps_->findData(30));
     videoForm->addRow(tr("Frame rate"), fps_);
+
+    language_ = new QComboBox(this);
+    language_->addItem(QStringLiteral("简体中文"), QStringLiteral("zh_CN"));
+    language_->addItem(QStringLiteral("English"), QStringLiteral("en"));
+    videoForm->addRow(tr("Interface language"), language_);
     root->addLayout(videoForm);
 
     root->addWidget(new QLabel(tr("RECORDING"), this));
@@ -133,5 +138,21 @@ QString SettingsDialog::streamUrl() const
 }
 
 QString SettingsDialog::streamKey() const { return streamKey_->text().trimmed(); }
+
+QString SettingsDialog::language() const
+{
+    return language_ ? language_->currentData().toString() : QString();
+}
+
+void SettingsDialog::setLanguage(const QString& code)
+{
+    if (!language_) {
+        return;
+    }
+    const int index = language_->findData(code);
+    if (index >= 0) {
+        language_->setCurrentIndex(index);
+    }
+}
 
 } // namespace mixvera::ui

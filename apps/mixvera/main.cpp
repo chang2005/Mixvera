@@ -8,11 +8,14 @@
 #include <QFileInfo>
 #include <QLabel>
 #include <QListWidget>
+#include <QLocale>
 #include <QPushButton>
+#include <QSettings>
 #include <QSlider>
 #include <QSurfaceFormat>
 #include <QTextStream>
 #include <QTimer>
+#include <QTranslator>
 
 #include <iostream>
 
@@ -66,12 +69,13 @@ int main(int argc, char** argv)
 {
     QApplication qt(argc, argv);
     QCoreApplication::setApplicationName("Mixvera");
-    QCoreApplication::setApplicationVersion("0.2.0");
+    QCoreApplication::setApplicationVersion("0.3.0");
     QCoreApplication::setOrganizationName("Mixvera");
 
     QString screenshotPath;
     QString dumpPath;
     QString projectFilePath;
+    QString languageOverride;
     int screenshotDelayMs = 1500;
     bool restoreSession = true;
     const QStringList arguments = QCoreApplication::arguments();
@@ -84,8 +88,33 @@ int main(int argc, char** argv)
             projectFilePath = arguments[++index];
         } else if (arguments[index] == "--screenshot-delay" && index + 1 < arguments.size()) {
             screenshotDelayMs = arguments[++index].toInt();
+        } else if (arguments[index] == "--lang" && index + 1 < arguments.size()) {
+            languageOverride = arguments[++index];
         } else if (arguments[index] == "--no-restore") {
             restoreSession = false;
+        }
+    }
+
+    QString language = languageOverride;
+    if (language.isEmpty()) {
+        language = qEnvironmentVariable("MIXVERA_LANG");
+    }
+    if (language.isEmpty()) {
+        QSettings settings;
+        language = settings.value("ui/language").toString();
+    }
+    if (language.isEmpty()) {
+        language = QLocale::system().language() == QLocale::Chinese ? "zh_CN" : "en";
+    }
+
+    qt.setProperty("mixvera/language", language);
+
+    auto* translator = new QTranslator(&qt);
+    if (language.startsWith("zh", Qt::CaseInsensitive)) {
+        if (translator->load(QStringLiteral(":/i18n/mixvera_zh_CN.qm"))) {
+            qt.installTranslator(translator);
+        } else {
+            std::cerr << "Failed to load the Simplified Chinese translation\n";
         }
     }
 

@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.3.0] — 2026-11-25
+
+简体中文界面 + vMix 式工作区重排。采集、合成、切换与输出能力沿用 0.2。
+
+### 新增
+
+- **简体中文**：213 条界面文案全部翻译；`QTranslator` 从内嵌资源 `:/i18n/mixvera_zh_CN.qm` 加载
+- **语言选择**：`设置 → 界面语言`、`--lang zh_CN`、`MIXVERA_LANG`、`QSettings ui/language`、系统语言五级回退
+- **vMix 式布局**：预览左 / 节目右双监视器，中央竖向转场列，底部横向输入条与功能栏
+- **输入条**：190×164 缩略图卡片、PGM/PVW 标题色、PVW / PGM / 加场景 / 属性 / 移除快捷按钮，分类筛选与名称搜索
+- **可收起面板**：场景与来源、调音台均可从顶栏或「视图」菜单显示/隐藏
+- **vMix 配色**：`#1E2328` 背景、`#404B56` 转场面板、`#FF8C00` 预览、`#006400` 节目、`#293038` 页脚
+- **翻译资源**：`translations/mixvera_zh_CN.ts`、`mixvera_zh_CN.qm`、`translations.qrc`
+- `--lang` 命令行参数与 `--dump-ui` 中文控件树输出
+
+### 变更
+
+- 主窗口由「左侧场景/源 + 大 PGM/小 PVW + 右侧输入列表」改为「可收起场景栏 + PVW/转场/PGM 三联 + 横向输入条 + 页脚」
+- 转场按钮改为 `硬切` / `自动` 上下排列，Fade / Wipe / Slide / Zoom 2×2 网格，T-BAR 改为竖向推子
+- 监视器标题条改为 vMix 式纯色条：预览橙、节目绿，不再覆盖画面
+- 调音台从底部横排改为右侧可收起竖排，通道条更紧凑
+- 输入列表由 `QListWidget` 改为 `QScrollArea` + 自绘 `InputTile`
+- 默认工程名称（Welcome / Camera 1 / Scene 1 等）随界面语言本地化
+- 测试改为通过 `InputPanel::count()` 校验输入数量
+
+### 修复
+
+- `lupdate` 生成的 context 缺少 `mixvera::ui::` 命名空间，导致 `.qm` 能加载但界面不翻译；现已在 `.ts` 中补齐
+- 中文界面下 QSS 复选框缺少对勾图标，新增 `resources/check.svg`
+- 输入条在窗口缩小时横向滚动而不是压缩缩略图
+
+### 测试
+
+- 四个测试目标全部通过（core / project / ui smoke / media）
+- UI smoke 覆盖新输入条结构、CUT/AUTO/T-BAR、监视器出帧、场景选择与界面录制
+
 ## [0.2.0] — 2026-11-24
 
 第一个可用版本：真实采集、场景合成、转场与录制全部打通，界面按 OBS Studio 与 vMix 的可观察产物重做。

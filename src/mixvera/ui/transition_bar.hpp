@@ -11,8 +11,9 @@ class QLabel;
 
 namespace mixvera::ui {
 
-/// The vMix style transition cluster: type buttons, CUT / AUTO, FTB and the
-/// horizontal T-Bar. It only reports intent; the main window owns the state.
+/// The vMix style transition cluster: CUT / AUTO, type buttons, FTB and a
+/// vertical T-Bar between the preview and program monitors. It only reports
+/// intent; the main window owns the state.
 class TransitionBar final : public QFrame {
     Q_OBJECT
 

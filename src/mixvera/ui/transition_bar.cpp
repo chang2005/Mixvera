@@ -1,6 +1,6 @@
 #include "mixvera/ui/transition_bar.hpp"
 
-#include <QButtonGroup>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -27,68 +27,77 @@ TransitionBar::TransitionBar(QWidget* parent)
     : QFrame(parent)
 {
     setObjectName("transitionBar");
+    setFixedWidth(156);
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(10, 7, 10, 8);
-    root->setSpacing(6);
+    root->setContentsMargins(8, 8, 8, 8);
+    root->setSpacing(5);
 
-    auto* row = new QHBoxLayout;
-    row->setSpacing(6);
+    root->addWidget(label(tr("TRANSITION"), "dockTitle", this));
 
-    fade_ = typeButton(core::TransitionKind::Fade, tr("Fade"));
-    wipe_ = typeButton(core::TransitionKind::Wipe, tr("Wipe"));
-    slide_ = typeButton(core::TransitionKind::Slide, tr("Slide"));
-    zoom_ = typeButton(core::TransitionKind::Zoom, tr("Zoom"));
-    row->addWidget(fade_);
-    row->addWidget(wipe_);
-    row->addWidget(slide_);
-    row->addWidget(zoom_);
-    row->addSpacing(4);
+    liveName_ = label(QString(), "controlLabel", this);
+    liveName_->setWordWrap(true);
+    liveName_->setAlignment(Qt::AlignCenter);
+    liveName_->setMinimumHeight(28);
+    root->addWidget(liveName_);
 
     cut_ = new QPushButton(tr("CUT"), this);
     cut_->setObjectName("cutButton");
     cut_->setToolTip(tr("Cut to preview (Space)"));
     cut_->setCursor(Qt::PointingHandCursor);
-    row->addWidget(cut_);
+    cut_->setMinimumHeight(38);
+    root->addWidget(cut_);
 
     auto_ = new QPushButton(tr("AUTO"), this);
     auto_->setObjectName("autoButton");
     auto_->setToolTip(tr("Run the selected transition (Enter)"));
     auto_->setCursor(Qt::PointingHandCursor);
-    row->addWidget(auto_);
+    auto_->setMinimumHeight(38);
+    root->addWidget(auto_);
+
+    auto* types = new QGridLayout;
+    types->setSpacing(4);
+    fade_ = typeButton(core::TransitionKind::Fade, tr("Fade"));
+    wipe_ = typeButton(core::TransitionKind::Wipe, tr("Wipe"));
+    slide_ = typeButton(core::TransitionKind::Slide, tr("Slide"));
+    zoom_ = typeButton(core::TransitionKind::Zoom, tr("Zoom"));
+    types->addWidget(fade_, 0, 0);
+    types->addWidget(wipe_, 0, 1);
+    types->addWidget(slide_, 1, 0);
+    types->addWidget(zoom_, 1, 1);
+    root->addLayout(types);
 
     duration_ = new QSpinBox(this);
     duration_->setRange(100, 5000);
     duration_->setSingleStep(50);
     duration_->setValue(500);
     duration_->setSuffix(" ms");
-    duration_->setFixedWidth(88);
-    row->addWidget(duration_);
+    duration_->setToolTip(tr("Transition duration"));
+    duration_->setFixedWidth(96);
+    root->addWidget(duration_, 0, Qt::AlignHCenter);
 
     ftb_ = new QPushButton(tr("FTB"), this);
     ftb_->setObjectName("ftbButton");
     ftb_->setCheckable(true);
     ftb_->setToolTip(tr("Fade to black (program out)"));
-    row->addWidget(ftb_);
+    ftb_->setMinimumHeight(32);
+    root->addWidget(ftb_);
 
-    liveName_ = label("", "controlLabel", this);
-    row->addStretch();
-    row->addWidget(liveName_);
-    mix_ = label("MIX 000%", "mixReadout", this);
-    mix_->setMinimumWidth(86);
-    mix_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    row->addWidget(mix_);
-    root->addLayout(row);
+    root->addSpacing(2);
+    auto* tbarLabel = label(tr("T-BAR"), "controlLabel", this);
+    tbarLabel->setAlignment(Qt::AlignCenter);
+    root->addWidget(tbarLabel);
 
-    auto* tbarRow = new QHBoxLayout;
-    tbarRow->setSpacing(8);
-    tbarRow->addWidget(label(tr("T-BAR"), "controlLabel", this));
-    tbar_ = new QSlider(Qt::Horizontal, this);
+    tbar_ = new QSlider(Qt::Vertical, this);
     tbar_->setObjectName("tbar");
     tbar_->setRange(0, 1023);
     tbar_->setValue(0);
     tbar_->setToolTip(tr("Drag past 50% to complete the transition"));
-    tbarRow->addWidget(tbar_, 1);
-    root->addLayout(tbarRow);
+    tbar_->setMinimumHeight(120);
+    root->addWidget(tbar_, 1, Qt::AlignHCenter);
+
+    mix_ = label(QStringLiteral("MIX 000%"), "mixReadout", this);
+    mix_->setAlignment(Qt::AlignCenter);
+    root->addWidget(mix_);
 
     connect(cut_, &QPushButton::clicked, this, &TransitionBar::cutRequested);
     connect(auto_, &QPushButton::clicked, this, &TransitionBar::autoRequested);
@@ -118,6 +127,7 @@ QPushButton* TransitionBar::typeButton(core::TransitionKind kind, const QString&
     button->setCheckable(true);
     button->setProperty("transitionKind", static_cast<int>(kind));
     button->setCursor(Qt::PointingHandCursor);
+    button->setMinimumHeight(28);
     return button;
 }
 
@@ -166,7 +176,7 @@ void TransitionBar::setFtb(bool engaged)
 
 void TransitionBar::setLiveTransitionName(const QString& name)
 {
-    liveName_->setText(name.toUpper());
+    liveName_->setText(name);
 }
 
 } // namespace mixvera::ui

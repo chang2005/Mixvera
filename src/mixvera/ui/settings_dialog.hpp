@@ -24,12 +24,15 @@ public:
     QString recordingDirectory() const;
     QString streamUrl() const;
     QString streamKey() const;
+    QString language() const;
+    void setLanguage(const QString& code);
 
 private:
     QComboBox* preset_ = nullptr;
     QSpinBox* width_ = nullptr;
     QSpinBox* height_ = nullptr;
     QComboBox* fps_ = nullptr;
+    QComboBox* language_ = nullptr;
     QLineEdit* recordingDirectory_ = nullptr;
     QLineEdit* streamUrl_ = nullptr;
     QLineEdit* streamKey_ = nullptr;

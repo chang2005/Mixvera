@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(Mixvera
-    VERSION 0.2.0
+    VERSION 0.3.0
     DESCRIPTION "Mixvera professional live production switcher"
     LANGUAGES CXX)
 
@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 option(MIXVERA_BUILD_UI "Build the Qt Widgets frontend" ON)
 option(MIXVERA_BUILD_TESTS "Build unit tests" ON)
@@ -78,7 +79,11 @@ if(MIXVERA_BUILD_UI)
         target_link_libraries(mixvera_ui PRIVATE user32)
     endif()
 
-    add_executable(Mixvera apps/mixvera/main.cpp)
+    add_executable(Mixvera
+        apps/mixvera/main.cpp
+        resources/resources.qrc
+        translations/translations.qrc
+    )
     target_link_libraries(Mixvera PRIVATE mixvera_ui mixvera_engine Qt6::Widgets)
 endif()
 

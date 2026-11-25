@@ -1,6 +1,7 @@
 #include "mixvera/core/application.hpp"
 #include "mixvera/core/project.hpp"
 #include "mixvera/services/switcher_service.hpp"
+#include "mixvera/ui/input_panel.hpp"
 #include "mixvera/ui/main_window.hpp"
 #include "mixvera/ui/media/recorder.hpp"
 #include "mixvera/ui/stage_view.hpp"
@@ -105,9 +106,9 @@ void UiSmokeTest::inputListShowsEverySource()
     window.show();
     QTest::qWait(150);
 
-    auto* list = window.findChild<QListWidget*>("inputList");
-    QVERIFY(list != nullptr);
-    QCOMPARE(list->count(), 5);
+    auto* panel = window.findChild<mixvera::ui::InputPanel*>("inputBar");
+    QVERIFY(panel != nullptr);
+    QCOMPARE(panel->count(), 5);
 }
 
 void UiSmokeTest::selectingASceneDoesNotLoop()

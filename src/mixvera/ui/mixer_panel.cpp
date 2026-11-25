@@ -67,7 +67,7 @@ protected:
             painter.fillRect(QRectF(1, 2, widthValue, height() - 4), gradient);
         }
 
-        painter.setPen(QColor("#323540"));
+        painter.setPen(QColor("#3E4853"));
         painter.drawRect(rect().adjusted(0, 0, -1, -1));
     }
 
@@ -89,26 +89,26 @@ MixerPanel::MixerPanel(QWidget* parent)
     : QFrame(parent)
 {
     setObjectName("mixerPanel");
-    auto* root = new QHBoxLayout(this);
-    root->setContentsMargins(8, 6, 8, 6);
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(8, 8, 8, 8);
     root->setSpacing(6);
 
-    auto* header = new QVBoxLayout;
-    header->setSpacing(2);
+    auto* header = new QHBoxLayout;
+    header->setSpacing(6);
     header->addWidget(caption(tr("AUDIO MIXER"), "dockTitle", this));
+    header->addStretch();
     deviceLabel_ = caption(tr("MASTER"), "controlLabel", this);
     header->addWidget(deviceLabel_);
-    header->addStretch();
     root->addLayout(header);
 
     scroll_ = new QScrollArea(this);
     scroll_->setWidgetResizable(true);
     scroll_->setFrameShape(QFrame::NoFrame);
-    scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     stripArea_ = new QWidget(scroll_);
     stripArea_->setObjectName("stripArea");
-    auto* strips = new QHBoxLayout(stripArea_);
+    auto* strips = new QVBoxLayout(stripArea_);
     strips->setContentsMargins(0, 0, 0, 0);
     strips->setSpacing(5);
     strips->addStretch();
@@ -117,20 +117,22 @@ MixerPanel::MixerPanel(QWidget* parent)
 
     auto* master = new QFrame(this);
     master->setObjectName("channelStrip");
-    master->setFixedWidth(74);
+    master->setFixedHeight(58);
     auto* masterLayout = new QVBoxLayout(master);
-    masterLayout->setContentsMargins(5, 4, 5, 4);
+    masterLayout->setContentsMargins(6, 5, 6, 5);
     masterLayout->setSpacing(3);
-    masterLayout->addWidget(caption(tr("MASTER"), "channelName", master));
-    auto* meterRow = new QHBoxLayout;
-    meterRow->setSpacing(4);
-    auto* meter = new LevelMeter(master);
+    auto* masterRow = new QHBoxLayout;
+    masterRow->setSpacing(6);
+    masterRow->addWidget(caption(tr("MASTER"), "channelName", master));
+    auto* meter = new LevelMeter(master, false);
     meter->setObjectName("masterMeter");
     masterMeter_ = meter;
-    meterRow->addWidget(meter);
-    auto* dbLabel = caption(tr("-60 dB"), "channelDb", master);
-    meterRow->addWidget(dbLabel);
-    masterLayout->addLayout(meterRow, 1);
+    masterRow->addWidget(meter, 1);
+    masterDb_ = caption(QStringLiteral("-60 dB"), "channelDb", master);
+    masterDb_->setMinimumWidth(48);
+    masterDb_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    masterRow->addWidget(masterDb_);
+    masterLayout->addLayout(masterRow);
     root->addWidget(master);
 
     connect(meter, &QWidget::destroyed, this, [this] { masterMeter_ = nullptr; });
@@ -146,7 +148,7 @@ void MixerPanel::setChannels(const std::vector<core::InputDescriptor>& inputs,
 
 void MixerPanel::rebuildChannels()
 {
-    auto* layout = qobject_cast<QHBoxLayout*>(stripArea_->layout());
+    auto* layout = qobject_cast<QVBoxLayout*>(stripArea_->layout());
     if (!layout) {
         return;
     }
@@ -158,10 +160,12 @@ void MixerPanel::rebuildChannels()
         delete item;
     }
 
+    int audioChannels = 0;
     for (const auto& input : inputs_) {
         if (!input.hasAudio) {
             continue;
         }
+        ++audioChannels;
 
         float gain = 0.0F;
         bool muted = false;
@@ -175,33 +179,36 @@ void MixerPanel::rebuildChannels()
 
         auto* strip = new QFrame(stripArea_);
         strip->setObjectName("channelStrip");
-        strip->setFixedWidth(70);
-        auto* stripLayout = new QVBoxLayout(strip);
-        stripLayout->setContentsMargins(4, 4, 4, 4);
-        stripLayout->setSpacing(3);
+        strip->setFixedHeight(62);
+        auto* row = new QHBoxLayout(strip);
+        row->setContentsMargins(6, 5, 6, 5);
+        row->setSpacing(5);
 
         auto* name = caption(QString::fromStdString(input.name), "channelName", strip);
+        name->setFixedWidth(76);
         name->setToolTip(QString::fromStdString(input.name));
-        stripLayout->addWidget(name);
+        row->addWidget(name);
 
-        auto* slider = new QSlider(Qt::Vertical, strip);
+        auto* slider = new QSlider(Qt::Horizontal, strip);
         slider->setRange(-60, 12);
         slider->setValue(static_cast<int>(std::lround(gain)));
-        slider->setFixedHeight(64);
-        stripLayout->addWidget(slider, 0, Qt::AlignHCenter);
+        slider->setMinimumWidth(76);
+        row->addWidget(slider, 1);
 
         auto* db = caption(QString("%1 dB").arg(static_cast<int>(std::lround(gain))),
             "channelDb", strip);
-        db->setAlignment(Qt::AlignCenter);
-        stripLayout->addWidget(db);
+        db->setMinimumWidth(44);
+        db->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        row->addWidget(db);
 
         auto* mute = new QToolButton(strip);
         mute->setObjectName("muteButton");
-        mute->setText(tr("M"));
+        mute->setText(QStringLiteral("M"));
         mute->setCheckable(true);
         mute->setChecked(muted);
         mute->setToolTip(tr("Mute"));
-        stripLayout->addWidget(mute);
+        mute->setFixedSize(24, 22);
+        row->addWidget(mute);
 
         const QString id = QString::fromStdString(input.id);
         connect(slider, &QSlider::valueChanged, this, [this, id, db](int value) {
@@ -214,6 +221,15 @@ void MixerPanel::rebuildChannels()
 
         layout->insertWidget(layout->count() - 1, strip);
     }
+
+    if (audioChannels == 0) {
+        auto* hint = new QLabel(tr("No inputs with audio yet. Camera and media "
+                                   "inputs appear here automatically."),
+            stripArea_);
+        hint->setObjectName("controlLabel");
+        hint->setWordWrap(true);
+        layout->insertWidget(0, hint);
+    }
 }
 
 void MixerPanel::setMasterLevel(float levelDb)
@@ -222,12 +238,8 @@ void MixerPanel::setMasterLevel(float levelDb)
         meter->setLevel(levelDb);
         meter->update();
     }
-    auto* master = masterMeter_ ? masterMeter_->parentWidget() : nullptr;
-    if (master) {
-        const auto labels = master->findChildren<QLabel*>("channelDb");
-        for (auto* label : labels) {
-            label->setText(QString("%1 dB").arg(static_cast<int>(std::lround(levelDb))));
-        }
+    if (masterDb_) {
+        masterDb_->setText(QString("%1 dB").arg(static_cast<int>(std::lround(levelDb))));
     }
 }
 
