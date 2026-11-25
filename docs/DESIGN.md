@@ -1,6 +1,6 @@
-# Mixvera 设计说明（0.4）
+# Mixvera 设计说明（0.5）
 
-这份文档说明 0.4 的界面、主题、调音台与设置界面的设计依据和实现约定。配色与控件语义的取证过程见 [UI-SPEC.md](UI-SPEC.md)，两份原程序的原工程结构复原见 [RE-PROJECTS.md](RE-PROJECTS.md)。
+这份文档说明 0.5 的界面、主题、调音台与设置界面的设计依据和实现约定，以及 0.5 新增的叠加层、转场与标题功能。配色与控件语义的取证过程见 [UI-SPEC.md](UI-SPEC.md)，三份原程序（OBS、vMix、SinSam）的观察记录见 [RE-PROJECTS.md](RE-PROJECTS.md) 与 [RE-SINSAM.md](RE-SINSAM.md)。
 
 原则只有一句：**借鉴公开可观察的组织方式与颜色值，不复制任何专有代码、图标、字体或资源。**
 
@@ -152,9 +152,28 @@ Yami 的 `#13141A`、`#1D1F26`、`#272A33`、`#284CB8`、`#C01C37`、`#37D247`�
 | 主题选择即时预览 | OBS 外观设置的选择方式 | `SettingsDialog::themePreviewRequested` |
 | 主窗体低频按钮、设置承载配置 | vMix 语言包条目分布（主窗体 38 条 vs 设置 262 条） | 主窗口 / 设置的信息分层 |
 
+## 0.5 增量：叠加层、转场与标题（SinSam 观察）
+
+0.5 的功能范围来自 [RE-SINSAM.md](RE-SINSAM.md) 的功能地图；界面上没有引入 SinSam 的任何视觉元素，只借鉴总线顺序与交互语义。
+
+| 设计点 | 证据（SinSam） | 落点 |
+| --- | --- | --- |
+| 4 路下游叠加层，位于转场后、FTB 前 | tools.json `OverlayInput1..4`、`PreviewOverlayInput*`；vMix 同语义 | `OverlayLayer`、`Compositor::applyOverlays`、页脚 OVERLAY 1–4 |
+| 预览叠加开关 | `PreviewOverlayInput` | 页脚 `PVW OVL` 复选框 |
+| 每层可指定任意输入、独立开关 | tools.json Overlay 类别 | 页脚按钮（点击开关、右键换输入）与输入条右键「叠加层」子菜单 |
+| Fly / Cube 转场 | tools.json Transition 类别的 `Fly`、`Cube` | `TransitionKind` 扩展、`Compositor::mix`、转场栏 2×3 网格 |
+| 标题预置：全屏 / 下三分之一 / 倒计时 / 比分牌 | SKILL.md 标题控制与 `TitleProperty*Layout` 资源名 | `TitleProvider` 四种绘制、`AddInputDialog` 标题页 |
+| 倒计时开始 / 暂停 / 重置 | tools.json Title 类别 | 输入条右键「标题控制」子菜单；运行参数（end/remaining/paused）随工程保存 |
+| 比分递增 / 递减 | tools.json `Increment` | 同一子菜单的「主队/客队得分 ±1」 |
+| 截图（含叠加与 FTB 的节目输出） | tools.json Output 类别的 `Snaphost`（原文如此） | 页脚「快照」按钮、输出菜单、`Ctrl+Shift+P` |
+
+叠加层像素流程刻意保持简单：预览与节目先各自 `renderInput`，转场混合后按 1→4 的顺序把每层以 `drawCover` 铺满画布，最后 FTB。录制与推流收到的就是这条链路的输出。
+
 ## 边界
 
 - 调音台不做音频路由与混音总线；solo 只是监听状态，不改变输出。
 - 没有为高 DPI 单独提供图标位图；SVG 图标由 Qt 缩放。
 - Daylight 主题下监视器仍为近黑底，这是刻意的：节目画面不应因为界面主题变亮而失真。
-- 不复制 OBS / vMix 的 QSS 全文、图标、字体、语言包文本或窗体坐标。
+- 叠加层是全画布 `drawCover`，不做逐层位置/缩放调整；需要布局时把内容放进场景再作为叠加输入。
+- 倒计时走真实时钟（`countdownEnd` 时间戳），暂停/恢复会换算剩余毫秒；`.gtzip` 设计器格式不读取也不兼容。
+- 不复制 OBS / vMix / SinSam 的 QSS 全文、图标、字体、语言包文本、窗体坐标或标题模板。

@@ -431,11 +431,48 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
     QAction* addToScene = nullptr;
     QAction* properties = nullptr;
     QAction* remove = nullptr;
+    QAction* overlayNone = nullptr;
+    QList<QAction*> overlayLayers;
+    QAction* titleStart = nullptr;
+    QAction* titlePause = nullptr;
+    QAction* titleReset = nullptr;
+    QAction* homePlus = nullptr;
+    QAction* homeMinus = nullptr;
+    QAction* awayPlus = nullptr;
+    QAction* awayMinus = nullptr;
+
     if (!id.isEmpty()) {
         preview = menu.addAction(tr("Set Preview"));
         cut = menu.addAction(tr("Cut to Program"));
         menu.addSeparator();
         addToScene = menu.addAction(tr("Add to Current Scene"));
+
+        QMenu* overlay = menu.addMenu(tr("Overlay"));
+        overlayNone = overlay->addAction(tr("Not in an overlay"));
+        overlay->addSeparator();
+        for (int layer = 1; layer <= 4; ++layer) {
+            overlayLayers.append(overlay->addAction(tr("Assign to Overlay %1").arg(layer)));
+        }
+
+        const core::InputDescriptor* input = nullptr;
+        for (const auto& candidate : inputs_) {
+            if (candidate.id == id.toStdString()) {
+                input = &candidate;
+                break;
+            }
+        }
+        if (input && input->kind == core::InputKind::Title) {
+            QMenu* title = menu.addMenu(tr("Title Controls"));
+            titleStart = title->addAction(tr("Start / Resume Countdown"));
+            titlePause = title->addAction(tr("Pause Countdown"));
+            titleReset = title->addAction(tr("Reset Countdown"));
+            title->addSeparator();
+            homePlus = title->addAction(tr("Home Score +1"));
+            homeMinus = title->addAction(tr("Home Score −1"));
+            awayPlus = title->addAction(tr("Away Score +1"));
+            awayMinus = title->addAction(tr("Away Score −1"));
+        }
+
         properties = menu.addAction(tr("Input Properties…"));
         menu.addSeparator();
         remove = menu.addAction(tr("Remove Input"));
@@ -456,6 +493,24 @@ void InputPanel::showContextMenu(const QString& id, const QPoint& globalPos)
         emit cutRequested(id);
     } else if (chosen == addToScene) {
         emit addToSceneRequested(id);
+    } else if (overlayNone && chosen == overlayNone) {
+        emit overlayClearRequested(id);
+    } else if (overlayLayers.contains(chosen)) {
+        emit overlayAssignRequested(id, overlayLayers.indexOf(chosen) + 1);
+    } else if (chosen == titleStart) {
+        emit titleActionRequested(id, "countdownStart");
+    } else if (chosen == titlePause) {
+        emit titleActionRequested(id, "countdownPause");
+    } else if (chosen == titleReset) {
+        emit titleActionRequested(id, "countdownReset");
+    } else if (chosen == homePlus) {
+        emit titleActionRequested(id, "homePlus");
+    } else if (chosen == homeMinus) {
+        emit titleActionRequested(id, "homeMinus");
+    } else if (chosen == awayPlus) {
+        emit titleActionRequested(id, "awayPlus");
+    } else if (chosen == awayMinus) {
+        emit titleActionRequested(id, "awayMinus");
     } else if (chosen == properties) {
         emit propertiesRequested(id);
     } else if (chosen == remove) {

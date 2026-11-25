@@ -4,6 +4,8 @@
 #include "mixvera/ui/theme.hpp"
 
 #include <QMainWindow>
+#include <QPoint>
+
 #include <memory>
 
 class QLabel;
@@ -61,6 +63,15 @@ private:
     void onTbarMoved(float position);
     void onTbarReleased();
     void onFtbToggled(bool engaged);
+
+    void onOverlayToggled(int layer);
+    void showOverlayMenu(int layer, const QPoint& globalPos);
+    void onOverlayAssigned(const QString& id, int layer);
+    void onOverlayCleared(const QString& id);
+    void setOverlay(int layer, const std::string& inputId, bool enabled);
+    void refreshOverlayButtons();
+    void onTitleAction(const QString& id, const QString& action);
+    void onSnapshot();
 
     void onSceneSelected(const QString& id);
     void onSceneActivated(const QString& id);

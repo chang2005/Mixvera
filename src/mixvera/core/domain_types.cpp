@@ -87,6 +87,10 @@ const char* transitionKindKey(TransitionKind kind)
         return "slide";
     case TransitionKind::Zoom:
         return "zoom";
+    case TransitionKind::Fly:
+        return "fly";
+    case TransitionKind::Cube:
+        return "cube";
     }
     return "fade";
 }
@@ -105,6 +109,12 @@ TransitionKind transitionKindFromKey(const std::string& key)
     if (key == "zoom") {
         return TransitionKind::Zoom;
     }
+    if (key == "fly") {
+        return TransitionKind::Fly;
+    }
+    if (key == "cube") {
+        return TransitionKind::Cube;
+    }
     return TransitionKind::Fade;
 }
 
@@ -121,6 +131,10 @@ const char* transitionKindLabel(TransitionKind kind)
         return "Slide";
     case TransitionKind::Zoom:
         return "Zoom";
+    case TransitionKind::Fly:
+        return "Fly";
+    case TransitionKind::Cube:
+        return "Cube";
     }
     return "Fade";
 }

@@ -44,6 +44,8 @@ private:
     QPushButton* wipe_ = nullptr;
     QPushButton* slide_ = nullptr;
     QPushButton* zoom_ = nullptr;
+    QPushButton* fly_ = nullptr;
+    QPushButton* cube_ = nullptr;
     QPushButton* cut_ = nullptr;
     QPushButton* auto_ = nullptr;
     QPushButton* ftb_ = nullptr;

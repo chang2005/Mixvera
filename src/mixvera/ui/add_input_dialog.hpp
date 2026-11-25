@@ -5,6 +5,9 @@
 #include <QColor>
 #include <QDialog>
 
+#include <map>
+#include <string>
+
 class QComboBox;
 class QLineEdit;
 class QPlainTextEdit;
@@ -44,12 +47,21 @@ private:
     QLineEdit* file_ = nullptr;
     QPushButton* browse_ = nullptr;
     QPlainTextEdit* text_ = nullptr;
+    QComboBox* titleStyle_ = nullptr;
+    QLineEdit* subtitle_ = nullptr;
     QSpinBox* textSize_ = nullptr;
     QComboBox* align_ = nullptr;
     QPushButton* colour_ = nullptr;
+    QSpinBox* countdownSeconds_ = nullptr;
+    QLineEdit* competition_ = nullptr;
+    QLineEdit* homeName_ = nullptr;
+    QLineEdit* awayName_ = nullptr;
+    QSpinBox* homeScore_ = nullptr;
+    QSpinBox* awayScore_ = nullptr;
     QColor colourValue_ = QColor("#284cb8");
 
     QString id_;
+    std::map<std::string, std::string> baseParams_;
 };
 
 } // namespace mixvera::ui

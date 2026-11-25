@@ -1,6 +1,8 @@
 #include "mixvera/ui/media/compositor.hpp"
 
+#include <QLinearGradient>
 #include <QPainter>
+#include <QTransform>
 
 #include <algorithm>
 
@@ -8,10 +10,32 @@ namespace mixvera::ui {
 
 namespace {
 
+constexpr qreal kPi = 3.14159265358979323846;
+
 bool sameSettings(const core::InputDescriptor& left, const core::InputDescriptor& right)
 {
     return left.kind == right.kind && left.params == right.params
         && left.name == right.name;
+}
+
+/// Draws a whole-canvas image as a flying card: scaled and rotated about its
+/// own centre. Used by the Fly transition.
+void drawFlyingCard(QPainter& painter, const QImage& image, const QSizeF& canvas,
+    const QPointF& center, qreal scale, qreal rotation, qreal opacity)
+{
+    if (image.isNull() || opacity <= 0.001) {
+        return;
+    }
+    painter.save();
+    painter.setOpacity(std::clamp(opacity, 0.0, 1.0));
+    QTransform transform;
+    transform.translate(center.x(), center.y());
+    transform.rotate(rotation);
+    transform.scale(scale, scale);
+    transform.translate(-canvas.width() / 2.0, -canvas.height() / 2.0);
+    painter.setTransform(transform);
+    painter.drawImage(QPointF(0, 0), image);
+    painter.restore();
 }
 
 } // namespace
@@ -127,9 +151,14 @@ QImage Compositor::renderInput(const std::vector<core::InputDescriptor>& inputs,
 }
 
 QImage Compositor::renderScene(const core::InputDescriptor& scene,
-    const std::vector<core::InputDescriptor>& inputs) const
+    const std::vector<core::InputDescriptor>& inputs, bool opaqueBackground) const
 {
-    QImage canvas = black();
+    QImage canvas(canvas_, QImage::Format_ARGB32_Premultiplied);
+    if (opaqueBackground) {
+        canvas = black();
+    } else {
+        canvas.fill(Qt::transparent);
+    }
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -150,6 +179,57 @@ QImage Compositor::renderScene(const core::InputDescriptor& scene,
         drawCover(painter, image, target);
     }
     painter.setOpacity(1.0);
+    return canvas;
+}
+
+QImage Compositor::overlayImage(const core::InputDescriptor& input,
+    const std::vector<core::InputDescriptor>& inputs) const
+{
+    if (input.isScene()) {
+        return renderScene(input, inputs, false);
+    }
+    return sourceImage(input.id);
+}
+
+QImage Compositor::applyOverlays(const QImage& base,
+    const std::vector<core::InputDescriptor>& inputs,
+    const std::vector<core::OverlayLayer>& overlays) const
+{
+    QImage canvas = base.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    QPainter painter(&canvas);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    for (int layer = 1; layer <= 4; ++layer) {
+        const core::OverlayLayer* overlay = nullptr;
+        for (const auto& candidate : overlays) {
+            if (candidate.layer == layer) {
+                overlay = &candidate;
+                break;
+            }
+        }
+        if (!overlay || !overlay->enabled || overlay->inputId.empty()) {
+            continue;
+        }
+
+        const core::InputDescriptor* input = nullptr;
+        for (const auto& candidate : inputs) {
+            if (candidate.id == overlay->inputId) {
+                input = &candidate;
+                break;
+            }
+        }
+        if (!input) {
+            continue;
+        }
+
+        const QImage image = overlayImage(*input, inputs);
+        if (image.isNull()) {
+            continue;
+        }
+        painter.setOpacity(1.0);
+        drawCover(painter, image, QRectF(QPointF(0, 0), QSizeF(canvas_)));
+    }
     return canvas;
 }
 
@@ -208,6 +288,57 @@ QImage Compositor::mix(const QImage& from, const QImage& to, core::TransitionKin
                              bounds.center().y() - toSize.height() / 2.0, toSize.width(),
                              toSize.height()),
             to);
+        break;
+    }
+
+    case core::TransitionKind::Fly: {
+        painter.fillRect(bounds, QColor("#050608"));
+        drawFlyingCard(painter, from, QSizeF(canvas_),
+            QPointF(bounds.width() * (0.50 - 0.30 * t),
+                bounds.height() * (0.50 - 0.30 * t)),
+            1.0 - 0.30 * t, -12.0 * t, 1.0 - t);
+        drawFlyingCard(painter, to, QSizeF(canvas_),
+            QPointF(bounds.width() * (0.82 - 0.32 * t),
+                bounds.height() * (0.80 - 0.30 * t)),
+            0.55 + 0.45 * t, 12.0 * (1.0 - t), t);
+        break;
+    }
+
+    case core::TransitionKind::Cube: {
+        // A horizontal cube spin: the outgoing face compresses to an edge,
+        // then the incoming face opens from the same edge. Shading fakes the
+        // unlit side of the cube without a 3D renderer.
+        painter.fillRect(bounds, QColor("#050608"));
+        const qreal halfWidth = bounds.width() / 2.0;
+        const qreal phase = t < 0.5F ? t / 0.5F : (1.0F - t) / 0.5F;
+        const qreal faceWidth = std::max<qreal>(1.0,
+            bounds.width() * std::cos(phase * kPi / 2.0));
+        if (t < 0.5F) {
+            const qreal progress = t / 0.5F;
+            const QRectF face(halfWidth - faceWidth / 2.0 + bounds.width() * 0.04 * progress,
+                0, faceWidth, bounds.height());
+            painter.setOpacity(1.0 - 0.12 * progress);
+            painter.drawImage(face, from);
+            painter.setOpacity(1.0);
+            QLinearGradient shade(face.left(), 0, face.right(), 0);
+            shade.setColorAt(0.0, QColor(0, 0, 0, 0));
+            shade.setColorAt(1.0, QColor(0, 0, 0, 180));
+            painter.fillRect(face, shade);
+        } else {
+            const qreal progress = (t - 0.5F) / 0.5F;
+            const QRectF face(halfWidth - faceWidth / 2.0
+                    - bounds.width() * 0.04 * (1.0 - progress),
+                0, faceWidth, bounds.height());
+            painter.setOpacity(0.88 + 0.12 * progress);
+            painter.drawImage(face, to);
+            painter.setOpacity(1.0);
+            QLinearGradient shade(face.left(), 0, face.right(), 0);
+            shade.setColorAt(0.0, QColor(0, 0, 0, 180));
+            shade.setColorAt(1.0, QColor(0, 0, 0, 0));
+            painter.fillRect(face, shade);
+        }
+        painter.setPen(QPen(QColor(255, 255, 255, 36), 1));
+        painter.drawLine(QPointF(halfWidth, 0), QPointF(halfWidth, bounds.height()));
         break;
     }
     }

@@ -307,6 +307,28 @@ QPushButton#footerButton {
 QPushButton#footerButton:hover {
     background: {{border}};
 }
+QPushButton#overlayButton {
+    background: {{surfaceAlt}};
+    border: 1px solid {{border}};
+    border-radius: 2px;
+    padding: 4px 0;
+    min-width: 36px;
+    color: {{textSoft}};
+    font-weight: 700;
+}
+QPushButton#overlayButton:hover {
+    background: {{hover}};
+}
+QPushButton#overlayButton:checked {
+    background: {{accent}};
+    border-color: {{accentHover}};
+    color: {{onAccent}};
+}
+QCheckBox#footerCheck {
+    color: {{textDim}};
+    font-size: 10px;
+    spacing: 5px;
+}
 QLabel#footerHint {
     color: {{textDim}};
     font-size: 10px;

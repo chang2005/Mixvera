@@ -6,6 +6,8 @@
 #include <QCamera>
 #include <QCameraDevice>
 #include <QColor>
+#include <QCoreApplication>
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFont>
@@ -23,6 +25,7 @@
 #include <QVideoFrame>
 #include <QVideoSink>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -145,12 +148,32 @@ class TitleProvider final : public SourceProvider {
 public:
     explicit TitleProvider(core::InputDescriptor input)
         : text_(param(input, "text", "TITLE"))
+        , subtitle_(param(input, "subtitle"))
+        , style_(param(input, "style", "full"))
         , color_(param(input, "color", "#ffffff"))
         , size_(param(input, "size", "64").toInt())
         , align_(param(input, "align", "center"))
+        , durationMs_(param(input, "countdownSeconds", "300").toLongLong() * 1000)
+        , endMs_(param(input, "countdownEnd", "0").toLongLong())
+        , remainingMs_(param(input, "countdownRemaining", "").toLongLong())
+        , paused_(param(input, "countdownPaused", "0") == "1")
+        , competition_(param(input, "competition"))
+        , homeName_(param(input, "homeName", "HOME"))
+        , awayName_(param(input, "awayName", "AWAY"))
+        , homeScore_(param(input, "scoreHome", "0").toInt())
+        , awayScore_(param(input, "scoreAway", "0").toInt())
     {
         if (text_.isEmpty()) {
             text_ = "TITLE";
+        }
+        if (!color_.isValid()) {
+            color_ = QColor("#ffffff");
+        }
+        if (durationMs_ <= 0) {
+            durationMs_ = 300000;
+        }
+        if (style_.isEmpty()) {
+            style_ = "full";
         }
     }
 
@@ -163,32 +186,229 @@ public:
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setRenderHint(QPainter::TextAntialiasing, true);
 
+        if (style_ == "lower") {
+            drawLowerThird(painter);
+        } else if (style_ == "countdown") {
+            drawCountdown(painter);
+        } else if (style_ == "scoreboard") {
+            drawScoreboard(painter);
+        } else {
+            drawFullScreen(painter);
+        }
+        return image;
+    }
+
+    QString detail() const override
+    {
+        if (style_ == "countdown") {
+            const qint64 seconds = (std::max<qint64>(remainingMs(), 0) + 999) / 1000;
+            return QStringLiteral("Countdown: %1:%2")
+                .arg(seconds / 60, 2, 10, QLatin1Char('0'))
+                .arg(seconds % 60, 2, 10, QLatin1Char('0'));
+        }
+        if (style_ == "scoreboard") {
+            return QStringLiteral("Score: %1 %2 : %3 %4")
+                .arg(homeName_)
+                .arg(homeScore_)
+                .arg(awayScore_)
+                .arg(awayName_);
+        }
+        if (style_ == "lower") {
+            return QStringLiteral("Lower third: %1").arg(text_.left(32));
+        }
+        return QStringLiteral("Title: %1").arg(text_.left(32));
+    }
+
+private:
+    Qt::Alignment alignment() const
+    {
+        if (align_ == "center") {
+            return Qt::AlignHCenter;
+        }
+        if (align_ == "right") {
+            return Qt::AlignRight;
+        }
+        return Qt::AlignLeft;
+    }
+
+    qint64 remainingMs() const
+    {
+        if (endMs_ > 0) {
+            return endMs_ - QDateTime::currentMSecsSinceEpoch();
+        }
+        return remainingMs_;
+    }
+
+    void drawFullScreen(QPainter& painter)
+    {
         QFont font(QStringLiteral("Bahnschrift"), std::max(8, size_), QFont::Bold);
         font.setLetterSpacing(QFont::AbsoluteSpacing, 1.5);
         painter.setFont(font);
 
-        Qt::Alignment alignment = Qt::AlignLeft;
-        if (align_ == "center") {
-            alignment = Qt::AlignHCenter;
-        } else if (align_ == "right") {
-            alignment = Qt::AlignRight;
-        }
-
         const QRect box(60, 60, kNativeWidth - 120, kNativeHeight - 120);
         painter.setPen(QColor(0, 0, 0, 170));
-        painter.drawText(box.translated(3, 3), alignment | Qt::AlignVCenter | Qt::TextWordWrap, text_);
-        painter.setPen(QColor(color_));
-        painter.drawText(box, alignment | Qt::AlignVCenter | Qt::TextWordWrap, text_);
-        return image;
+        painter.drawText(box.translated(3, 3),
+            alignment() | Qt::AlignVCenter | Qt::TextWordWrap, text_);
+        painter.setPen(color_);
+        painter.drawText(box, alignment() | Qt::AlignVCenter | Qt::TextWordWrap, text_);
     }
 
-    QString detail() const override { return QStringLiteral("Title: %1").arg(text_.left(32)); }
+    void drawLowerThird(QPainter& painter)
+    {
+        const int margin = 64;
+        const int panelHeight = 150;
+        const int textWidth = 760;
 
-private:
+        QFont mainFont(QStringLiteral("Bahnschrift"),
+            std::clamp(size_, 32, 72), QFont::Bold);
+        QFont subFont(QStringLiteral("Bahnschrift"), 24, QFont::Normal);
+        QFontMetrics mainMetrics(mainFont);
+        QFontMetrics subMetrics(subFont);
+        const QString mainText = mainMetrics.elidedText(text_, Qt::ElideRight, textWidth);
+        const QString subText = subMetrics.elidedText(subtitle_, Qt::ElideRight, textWidth);
+
+        int panelWidth = std::max(440,
+            std::max(mainMetrics.horizontalAdvance(mainText),
+                subMetrics.horizontalAdvance(subText))
+                + 64);
+        panelWidth = std::min(panelWidth, kNativeWidth - margin * 2);
+        const QRect panel(margin, kNativeHeight - 80 - panelHeight, panelWidth, panelHeight);
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(8, 10, 14, 218));
+        painter.drawRoundedRect(panel, 4, 4);
+        painter.fillRect(QRect(panel.left(), panel.top(), 10, panel.height()), color_);
+        painter.setPen(QPen(QColor(255, 255, 255, 28), 1));
+        painter.drawLine(panel.left(), panel.top(), panel.right(), panel.top());
+
+        painter.setFont(mainFont);
+        painter.setPen(QColor("#ffffff"));
+        painter.drawText(QRect(panel.left() + 30, panel.top() + 22, panel.width() - 48, 58),
+            Qt::AlignLeft | Qt::AlignVCenter, mainText);
+        if (!subText.isEmpty()) {
+            painter.setFont(subFont);
+            painter.setPen(QColor("#c9cfd8"));
+            painter.drawText(QRect(panel.left() + 30, panel.top() + 84, panel.width() - 48, 36),
+                Qt::AlignLeft | Qt::AlignVCenter, subText);
+        }
+    }
+
+    void drawCountdown(QPainter& painter)
+    {
+        const qint64 total = std::max<qint64>(durationMs_, 1);
+        const qint64 remaining = std::clamp<qint64>(remainingMs(), 0, total);
+        const int cardWidth = 560;
+        const int cardHeight = 260;
+        const QRect card((kNativeWidth - cardWidth) / 2, (kNativeHeight - cardHeight) / 2,
+            cardWidth, cardHeight);
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(8, 10, 14, 220));
+        painter.drawRoundedRect(card, 18, 18);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(color_, 2));
+        painter.drawRoundedRect(card.adjusted(1, 1, -1, -1), 18, 18);
+
+        QFont labelFont(QStringLiteral("Bahnschrift"), 24, QFont::DemiBold);
+        labelFont.setLetterSpacing(QFont::AbsoluteSpacing, 3.0);
+        painter.setFont(labelFont);
+        painter.setPen(QColor("#aeb7c0"));
+        const QString label = paused_
+            ? QCoreApplication::translate("Title", "PAUSED")
+            : (text_.isEmpty() ? QCoreApplication::translate("Title", "COUNTDOWN")
+                               : text_.toUpper());
+        painter.drawText(QRect(card.left(), card.top() + 26, card.width(), 34),
+            Qt::AlignHCenter, label);
+
+        const qint64 seconds = (remaining + 999) / 1000;
+        QString timer = QStringLiteral("%1:%2")
+                            .arg(seconds / 60, 2, 10, QLatin1Char('0'))
+                            .arg(seconds % 60, 2, 10, QLatin1Char('0'));
+        if (seconds >= 3600) {
+            timer = QStringLiteral("%1:%2:%3")
+                        .arg(seconds / 3600)
+                        .arg((seconds / 60) % 60, 2, 10, QLatin1Char('0'))
+                        .arg(seconds % 60, 2, 10, QLatin1Char('0'));
+        }
+        QFont timerFont(QStringLiteral("Consolas"), 92, QFont::Bold);
+        painter.setFont(timerFont);
+        painter.setPen(remaining <= 0 ? QColor("#e85e75") : QColor("#ffffff"));
+        painter.drawText(QRect(card.left(), card.top() + 68, card.width(), 124),
+            Qt::AlignCenter, timer);
+
+        const QRect track(card.left() + 40, card.bottom() - 48, card.width() - 80, 8);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 28));
+        painter.drawRoundedRect(track, 4, 4);
+        QRect fill = track;
+        fill.setWidth(static_cast<int>(track.width()
+            * (static_cast<double>(remaining) / static_cast<double>(total))));
+        painter.setBrush(remaining <= 0 ? QColor("#e85e75") : color_);
+        painter.drawRoundedRect(fill, 4, 4);
+    }
+
+    void drawScoreboard(QPainter& painter)
+    {
+        const int cardWidth = 820;
+        const int cardHeight = 158;
+        const QRect card((kNativeWidth - cardWidth) / 2, 42, cardWidth, cardHeight);
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(8, 10, 14, 220));
+        painter.drawRoundedRect(card, 12, 12);
+        painter.fillRect(QRect(card.left(), card.top(), card.width(), 6), color_);
+
+        QFont nameFont(QStringLiteral("Bahnschrift"), 28, QFont::DemiBold);
+        QFont scoreFont(QStringLiteral("Consolas"), 60, QFont::Bold);
+        QFont titleFont(QStringLiteral("Bahnschrift"), 20, QFont::Normal);
+        QFontMetrics nameMetrics(nameFont);
+
+        if (!competition_.isEmpty()) {
+            painter.setFont(titleFont);
+            painter.setPen(QColor("#aeb7c0"));
+            painter.drawText(QRect(card.left(), card.top() + 14, card.width(), 26),
+                Qt::AlignHCenter, competition_.toUpper());
+        }
+
+        painter.setFont(nameFont);
+        painter.setPen(QColor("#ffffff"));
+        painter.drawText(QRect(card.left() + 28, card.top() + 84, 210, 44),
+            Qt::AlignLeft | Qt::AlignVCenter,
+            nameMetrics.elidedText(homeName_, Qt::ElideRight, 210));
+        painter.drawText(QRect(card.left() + 582, card.top() + 84, 210, 44),
+            Qt::AlignRight | Qt::AlignVCenter,
+            nameMetrics.elidedText(awayName_, Qt::ElideRight, 210));
+
+        painter.setFont(scoreFont);
+        painter.setPen(QColor("#ffffff"));
+        painter.drawText(QRect(card.left() + 238, card.top() + 46, 120, 80),
+            Qt::AlignRight | Qt::AlignVCenter, QString::number(homeScore_));
+        painter.drawText(QRect(card.left() + 462, card.top() + 46, 120, 80),
+            Qt::AlignLeft | Qt::AlignVCenter, QString::number(awayScore_));
+
+        painter.setFont(nameFont);
+        painter.setPen(QColor("#8e98a3"));
+        painter.drawText(QRect(card.left() + 398, card.top() + 46, 24, 80),
+            Qt::AlignCenter, QStringLiteral(":"));
+    }
+
     QString text_;
-    QString color_;
+    QString subtitle_;
+    QString style_;
+    QColor color_;
     int size_ = 64;
     QString align_;
+
+    qint64 durationMs_ = 300000;
+    qint64 endMs_ = 0;
+    qint64 remainingMs_ = 0;
+    bool paused_ = false;
+
+    QString competition_;
+    QString homeName_;
+    QString awayName_;
+    int homeScore_ = 0;
+    int awayScore_ = 0;
 };
 
 class ImageProvider final : public SourceProvider {

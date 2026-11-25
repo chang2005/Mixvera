@@ -90,9 +90,39 @@ static void kindKeysRoundTrip()
 
     for (auto kind : {core::TransitionKind::Cut, core::TransitionKind::Fade,
              core::TransitionKind::Wipe, core::TransitionKind::Slide,
-             core::TransitionKind::Zoom}) {
+             core::TransitionKind::Zoom, core::TransitionKind::Fly,
+             core::TransitionKind::Cube}) {
         assert(core::transitionKindFromKey(core::transitionKindKey(kind)) == kind);
     }
+    assert(core::transitionKindKey(core::TransitionKind::Fly) == "fly");
+    assert(core::transitionKindKey(core::TransitionKind::Cube) == "cube");
+}
+
+static void overlayLayersRoundTrip()
+{
+    core::Project project = core::makeDefaultProject();
+    assert(project.overlays.size() == 4);
+    for (int index = 0; index < 4; ++index) {
+        assert(project.overlays[static_cast<std::size_t>(index)].layer == index + 1);
+        assert(!project.overlays[static_cast<std::size_t>(index)].enabled);
+    }
+
+    project.overlays[0].inputId = "title-1";
+    project.overlays[0].enabled = true;
+    project.overlays[2].inputId = "missing-input";
+    project.overlays[2].enabled = true;
+
+    const core::Project restored = core::projectFromJson(core::parseJson(
+        core::projectToJson(project).dump()));
+    assert(restored.overlays.size() == 4);
+    assert(restored.overlays[0].layer == 1);
+    assert(restored.overlays[0].inputId == "title-1");
+    assert(restored.overlays[0].enabled);
+    assert(restored.overlays[2].layer == 3);
+    // Unknown ids cannot be composited, so loading must clear them.
+    assert(restored.overlays[2].inputId.empty());
+    assert(!restored.overlays[2].enabled);
+    assert(!restored.overlays[1].enabled);
 }
 
 static void sceneLayerGeometrySurvives()
@@ -123,6 +153,7 @@ int main()
     roundTripsThroughJson();
     savesAndLoadsFromDisk();
     kindKeysRoundTrip();
+    overlayLayersRoundTrip();
     sceneLayerGeometrySurvives();
     std::cout << "project tests passed\n";
     return 0;

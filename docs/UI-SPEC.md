@@ -202,6 +202,20 @@ Mixvera 的取舍：
 | 中文术语 | OBS zh-CN | `translations/mixvera_zh_CN.ts` |
 | 语言加载与回退 | Qt i18n | `apps/mixvera/main.cpp`、`settings_dialog.cpp` |
 
+## 0.5：SinSam（芯象）叠加层与标题
+
+0.5 的证据来自对 `sinsam_setup.26.7.10.3.exe` 的只读逆向，完整记录见 [RE-SINSAM.md](RE-SINSAM.md)。只取总线顺序与交互语义，不取 SinSam 的任何视觉资源：
+
+| 界面元素 | 来源 | Mixvera 落点 |
+| --- | --- | --- |
+| 页脚叠加层行（OVERLAY 1–4，点击开关 / 右键选输入） | SinSam tools.json `OverlayInput1..4`；vMix 同语义 | `main_window.cpp` 页脚、`OverlayLayer` |
+| 预览叠加复选框 | SinSam `PreviewOverlayInput*` | 页脚 `PVW OVL`（`previewOverlaysToggle`） |
+| 输入条右键「叠加层」子菜单 | SinSam Overlay 工具类别 | `input_panel.cpp` `showContextMenu` |
+| Fly / Cube 转场按钮（2×3 网格） | SinSam tools.json Transition `Fly`、`Cube` | `transition_bar.cpp`、`compositor.cpp` `mix()` |
+| 标题四样式：全屏 / 下三分之一 / 倒计时 / 比分牌 | SinSam 标题预置与 `TitleProperty*Layout` 资源名 | `source_providers.cpp` `TitleProvider`、`add_input_dialog.cpp` |
+| 标题控制子菜单（倒计时开始/暂停/重置、比分 ±1） | SinSam tools.json Title 类别与 `Increment` | `input_panel.cpp`、`main_window.cpp` `onTitleAction` |
+| 快照按钮与 `Ctrl+Shift+P` | SinSam Output 类别 `Snaphost`（原文如此） | `main_window.cpp` `onSnapshot` |
+
 ## 有意不做的事
 
 - 不复制 OBS 的图标、QSS 全文、位图资源；只取颜色值与控件语义

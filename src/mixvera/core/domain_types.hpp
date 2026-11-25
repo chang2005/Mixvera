@@ -28,6 +28,17 @@ enum class TransitionKind {
     Wipe,
     Slide,
     Zoom,
+    Fly,
+    Cube,
+};
+
+/// One downstream overlay channel. Overlays sit above the program bus (after
+/// the transition, before FTB) and survive scene changes until they are turned
+/// off, following the vMix / SinSam model.
+struct OverlayLayer {
+    int layer = 1; ///< 1..4, 4 is on top
+    std::string inputId;
+    bool enabled = false;
 };
 
 /// One layer inside a scene. Geometry is normalised to the canvas (0..1) so a

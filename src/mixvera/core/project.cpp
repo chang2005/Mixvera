@@ -28,6 +28,23 @@ SceneItem sceneItemFromJson(const Json& value)
     return item;
 }
 
+std::vector<OverlayLayer> normalizedOverlays(const std::vector<OverlayLayer>& source)
+{
+    std::vector<OverlayLayer> result(4);
+    for (int index = 0; index < 4; ++index) {
+        result[index].layer = index + 1;
+    }
+    for (const auto& overlay : source) {
+        if (overlay.layer < 1 || overlay.layer > 4) {
+            continue;
+        }
+        auto& target = result[overlay.layer - 1];
+        target.inputId = overlay.inputId;
+        target.enabled = overlay.enabled && !overlay.inputId.empty();
+    }
+    return result;
+}
+
 Json inputToJson(const InputDescriptor& input)
 {
     Json params = Json::object();
@@ -135,6 +152,7 @@ Project makeDefaultProject()
     project.inputs = {pattern, colour, title, sceneOne, sceneTwo};
     project.programId = "scene-1";
     project.previewId = "scene-2";
+    project.overlays = normalizedOverlays({});
     return project;
 }
 
@@ -143,6 +161,12 @@ Json projectToJson(const Project& project)
     Json inputs = Json::array();
     for (const auto& input : project.inputs) {
         inputs.push_back(inputToJson(input));
+    }
+
+    Json overlays = Json::array();
+    for (const auto& overlay : normalizedOverlays(project.overlays)) {
+        overlays.push_back(Json{{"layer", overlay.layer},
+            {"input", overlay.inputId}, {"enabled", overlay.enabled}});
     }
 
     return Json{{"schema", "mixvera.project"}, {"version", 1},
@@ -155,6 +179,7 @@ Json projectToJson(const Project& project)
         {"transition",
             Json{{"kind", transitionKindKey(project.transitionKind)},
                 {"durationMs", project.transitionDurationMs}}},
+        {"overlays", overlays},
         {"outputs",
             Json{{"recordingDirectory", project.outputs.recordingDirectory},
                 {"streamUrl", project.outputs.streamUrl},
@@ -189,6 +214,23 @@ Project projectFromJson(const Json& value)
         project.transitionDurationMs = transition.value("durationMs", 500U);
     }
 
+    if (value.contains("overlays") && value["overlays"].is_array()) {
+        std::vector<OverlayLayer> overlays;
+        for (const auto& entry : value["overlays"]) {
+            if (!entry.is_object()) {
+                continue;
+            }
+            OverlayLayer overlay;
+            overlay.layer = entry.value("layer", 0);
+            overlay.inputId = entry.value("input", std::string());
+            overlay.enabled = entry.value("enabled", false);
+            overlays.push_back(overlay);
+        }
+        project.overlays = normalizedOverlays(overlays);
+    } else {
+        project.overlays = normalizedOverlays({});
+    }
+
     if (value.contains("outputs") && value["outputs"].is_object()) {
         const auto& outputs = value["outputs"];
         project.outputs.recordingDirectory = outputs.value(
@@ -209,6 +251,12 @@ Project projectFromJson(const Json& value)
     if (!preview) {
         project.previewId = project.inputs.size() > 1 ? project.inputs[1].id
                                                       : project.programId;
+    }
+    for (auto& overlay : project.overlays) {
+        if (!overlay.inputId.empty() && !findInput(project.inputs, overlay.inputId)) {
+            overlay.inputId.clear();
+            overlay.enabled = false;
+        }
     }
     return project;
 }

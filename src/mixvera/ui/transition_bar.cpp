@@ -60,10 +60,14 @@ TransitionBar::TransitionBar(QWidget* parent)
     wipe_ = typeButton(core::TransitionKind::Wipe, tr("Wipe"));
     slide_ = typeButton(core::TransitionKind::Slide, tr("Slide"));
     zoom_ = typeButton(core::TransitionKind::Zoom, tr("Zoom"));
+    fly_ = typeButton(core::TransitionKind::Fly, tr("Fly"));
+    cube_ = typeButton(core::TransitionKind::Cube, tr("Cube"));
     types->addWidget(fade_, 0, 0);
     types->addWidget(wipe_, 0, 1);
     types->addWidget(slide_, 1, 0);
     types->addWidget(zoom_, 1, 1);
+    types->addWidget(fly_, 2, 0);
+    types->addWidget(cube_, 2, 1);
     root->addLayout(types);
 
     duration_ = new QSpinBox(this);
@@ -104,7 +108,7 @@ TransitionBar::TransitionBar(QWidget* parent)
     connect(ftb_, &QPushButton::toggled, this, &TransitionBar::ftbToggled);
     connect(duration_, &QSpinBox::valueChanged, this, &TransitionBar::durationChanged);
 
-    for (QPushButton* button : {fade_, wipe_, slide_, zoom_}) {
+    for (QPushButton* button : {fade_, wipe_, slide_, zoom_, fly_, cube_}) {
         connect(button, &QPushButton::clicked, this, [this, button] {
             kind_ = static_cast<core::TransitionKind>(button->property("transitionKind").toInt());
             syncTypeButtons();
@@ -137,6 +141,8 @@ void TransitionBar::syncTypeButtons()
     wipe_->setChecked(kind_ == core::TransitionKind::Wipe);
     slide_->setChecked(kind_ == core::TransitionKind::Slide);
     zoom_->setChecked(kind_ == core::TransitionKind::Zoom);
+    fly_->setChecked(kind_ == core::TransitionKind::Fly);
+    cube_->setChecked(kind_ == core::TransitionKind::Cube);
 }
 
 void TransitionBar::setKind(core::TransitionKind kind)

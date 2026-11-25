@@ -70,7 +70,7 @@ int main(int argc, char** argv)
 {
     QApplication qt(argc, argv);
     QCoreApplication::setApplicationName("Mixvera");
-    QCoreApplication::setApplicationVersion("0.4.0");
+    QCoreApplication::setApplicationVersion("0.5.0");
     QCoreApplication::setOrganizationName("Mixvera");
 
     QString screenshotPath;

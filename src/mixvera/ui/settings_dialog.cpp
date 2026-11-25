@@ -453,7 +453,7 @@ QWidget* SettingsDialog::buildAudioPage()
 
     QVBoxLayout* limitBody = nullptr;
     auto* limitCard = makeCard(tr("CURRENT LIMITATION"), content, &limitBody);
-    auto* warning = note(tr("Mixvera 0.4 meters audio but does not mix it into the program "
+    auto* warning = note(tr("Mixvera meters audio but does not mix it into the program "
                             "output yet: recordings and streams are silent video. Channel "
                             "gain, mute and solo already run through AudioService, so the "
                             "mixer becomes audible when the engine work lands."),

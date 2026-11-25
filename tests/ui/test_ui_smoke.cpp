@@ -27,6 +27,8 @@ private slots:
     void monitorsReceiveFrames();
     void inputListShowsEverySource();
     void selectingASceneDoesNotLoop();
+    void overlayButtonsToggle();
+    void snapshotWritesPng();
     void recordsThroughTheUi();
     void themeStylesheetsAreComplete();
     void themeIsAppliedToMainWindow();
@@ -133,6 +135,61 @@ void UiSmokeTest::selectingASceneDoesNotLoop()
     QTest::qWait(50);
     QCOMPARE(QString::fromStdString(switcher().state().previewInputId), QString("scene-2"));
     QCOMPARE(QString::fromStdString(switcher().state().programInputId), QString("scene-1"));
+}
+
+void UiSmokeTest::overlayButtonsToggle()
+{
+    mixvera::ui::MainWindow window(false);
+    window.show();
+    QTest::qWait(150);
+
+    const auto buttons = window.findChildren<QPushButton*>("overlayButton");
+    QCOMPARE(buttons.size(), 4);
+    QPushButton* layerOne = nullptr;
+    for (auto* button : buttons) {
+        if (button->property("overlayLayer").toInt() == 1) {
+            layerOne = button;
+        }
+    }
+    QVERIFY(layerOne != nullptr);
+    QVERIFY(!layerOne->isChecked());
+
+    auto* panel = window.findChild<mixvera::ui::InputPanel*>("inputBar");
+    QVERIFY(panel != nullptr);
+    panel->selectInput("title-1");
+    layerOne->click();
+    QVERIFY(layerOne->isChecked());
+    QVERIFY(layerOne->toolTip().contains("Mixvera Title"));
+    QTest::qWait(120);
+
+    layerOne->click();
+    QVERIFY(!layerOne->isChecked());
+}
+
+void UiSmokeTest::snapshotWritesPng()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    mixvera::core::Project project = mixvera::core::makeDefaultProject();
+    project.outputs.recordingDirectory = directory.path().toStdString();
+    const QString projectPath = QDir(directory.path()).filePath("snapshot.json");
+    QVERIFY(mixvera::core::saveProjectFile(project, projectPath.toStdString()));
+
+    mixvera::ui::MainWindow window(false);
+    window.show();
+    QVERIFY(window.loadProject(projectPath));
+    QTest::qWait(350);
+
+    auto* snapshot = window.findChild<QPushButton*>("snapshotButton");
+    QVERIFY(snapshot != nullptr);
+    snapshot->click();
+    QTest::qWait(250);
+
+    const QStringList files = QDir(directory.path()).entryList({"*.png"}, QDir::Files);
+    QVERIFY2(!files.isEmpty(), "Snapshot button did not write a PNG");
+    const QFileInfo info(QDir(directory.path()).filePath(files.front()));
+    QVERIFY(info.size() > 1024);
 }
 
 void UiSmokeTest::recordsThroughTheUi()

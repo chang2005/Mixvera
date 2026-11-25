@@ -20,6 +20,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QDir>
@@ -31,6 +32,7 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLocale>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
@@ -39,6 +41,7 @@
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStandardPaths>
+#include <QStatusBar>
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
@@ -46,6 +49,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace mixvera::ui {
 
@@ -121,6 +125,10 @@ struct MainWindow::Impl {
     QLabel* streamPill = nullptr;
     QPushButton* recordButton = nullptr;
     QPushButton* streamButton = nullptr;
+    QPushButton* overlayButtons[4] = {nullptr, nullptr, nullptr, nullptr};
+    QCheckBox* previewOverlaysToggle = nullptr;
+    bool previewOverlays = false;
+    QImage lastProgramFrame;
 
     QTimer* tickTimer = nullptr;
     QTimer* secondTimer = nullptr;
@@ -145,7 +153,7 @@ MainWindow::MainWindow(bool restoreSession, QWidget* parent)
     : QMainWindow(parent)
     , impl_(std::make_unique<Impl>())
 {
-    setWindowTitle(tr("Mixvera 0.4 — Live Production Switcher"));
+    setWindowTitle(tr("Mixvera 0.5 — Live Production Switcher"));
     resize(1600, 960);
     setMinimumSize(1280, 760);
 
@@ -369,6 +377,39 @@ void MainWindow::buildLayout()
     impl_->streamButton->setToolTip(tr("Start / stop the RTMP push"));
     footerLayout->addWidget(impl_->streamButton);
 
+    auto* snapshot = new QPushButton(tr("Snapshot"), footer);
+    snapshot->setObjectName("snapshotButton");
+    snapshot->setToolTip(tr("Save the current program frame as a PNG (Ctrl+Shift+P)"));
+    snapshot->setCursor(Qt::PointingHandCursor);
+    footerLayout->addWidget(snapshot);
+
+    footerLayout->addSpacing(8);
+    footerLayout->addWidget(makeLabel(tr("OVERLAY"), "footerHint", footer));
+    // Four downstream overlay channels, laid out like the vMix overlay row:
+    // 1 is the lowest layer, 4 sits on top. A right-click picks the input.
+    for (int layer = 1; layer <= 4; ++layer) {
+        auto* button = new QPushButton(QString::number(layer), footer);
+        button->setObjectName("overlayButton");
+        button->setCheckable(true);
+        button->setFixedWidth(40);
+        button->setProperty("overlayLayer", layer);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setContextMenuPolicy(Qt::CustomContextMenu);
+        footerLayout->addWidget(button);
+        impl_->overlayButtons[layer - 1] = button;
+        connect(button, &QPushButton::clicked, this, [this, layer] { onOverlayToggled(layer); });
+        connect(button, &QWidget::customContextMenuRequested, this,
+            [this, button, layer](const QPoint& position) {
+                showOverlayMenu(layer, button->mapToGlobal(position));
+            });
+    }
+
+    impl_->previewOverlaysToggle = new QCheckBox(tr("PVW OVL"), footer);
+    impl_->previewOverlaysToggle->setObjectName("footerCheck");
+    impl_->previewOverlaysToggle->setToolTip(
+        tr("Show the enabled overlays on the preview monitor too"));
+    footerLayout->addWidget(impl_->previewOverlaysToggle);
+
     auto* hint = makeLabel(tr("SPACE cut · ENTER transition · F11 fullscreen"),
         "footerHint", footer);
     footerLayout->addStretch();
@@ -381,7 +422,10 @@ void MainWindow::buildLayout()
     setStatusBar(impl_->status);
 
     connect(addInput, &QPushButton::clicked, this, &MainWindow::onAddInput);
+    connect(snapshot, &QPushButton::clicked, this, &MainWindow::onSnapshot);
     connect(settings, &QPushButton::clicked, this, &MainWindow::onSettings);
+    connect(impl_->previewOverlaysToggle, &QCheckBox::toggled, this,
+        [this](bool enabled) { impl_->previewOverlays = enabled; });
     connect(fullscreen, &QPushButton::clicked, this, [this] {
         isFullScreen() ? showNormal() : showFullScreen();
     });
@@ -492,17 +536,23 @@ void MainWindow::buildMenus()
     output->addAction(tr("Start / Stop Streaming"), this, [this] {
         impl_->streamButton->setChecked(!impl_->streamButton->isChecked());
     });
+    output->addSeparator();
+    output->addAction(tr("Save Program &Snapshot"), QKeySequence(tr("Ctrl+Shift+P")), this,
+        &MainWindow::onSnapshot);
 
     auto* help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("&About Mixvera"), this, [this] {
         QMessageBox::about(this, tr("About Mixvera"),
-            tr("<h3>Mixvera 0.4</h3>"
+            tr("<h3>Mixvera 0.5</h3>"
                "<p>Live production switcher: scene based compositing, real capture "
-               "inputs, CUT / AUTO / T-Bar transitions, a channel-strip audio mixer "
-               "and ffmpeg recording.</p>"
+               "inputs, CUT / AUTO / T-Bar transitions with Fly and Cube, four "
+               "downstream overlay layers, lower third / countdown / scoreboard "
+               "titles, a channel-strip audio mixer, PNG snapshots and ffmpeg "
+               "recording.</p>"
                "<p>The workspace follows vMix: preview on the left, program on the "
                "right and a vertical transition cluster between them. The input "
-               "bar and footer keep the show controls within one click.</p>"
+               "bar, overlay row and footer keep the show controls within one "
+               "click.</p>"
                "<p>Three themes (Charcoal, Yami, Daylight), an OBS style settings "
                "window and a Simplified Chinese / English interface.</p>"));
     });
@@ -552,6 +602,12 @@ void MainWindow::connectSignals()
     connect(impl_->inputsPanel, &InputPanel::cutRequested, this, &MainWindow::onInputCut);
     connect(impl_->inputsPanel, &InputPanel::addToSceneRequested, this,
         &MainWindow::onInputAddToScene);
+    connect(impl_->inputsPanel, &InputPanel::overlayAssignRequested, this,
+        &MainWindow::onOverlayAssigned);
+    connect(impl_->inputsPanel, &InputPanel::overlayClearRequested, this,
+        &MainWindow::onOverlayCleared);
+    connect(impl_->inputsPanel, &InputPanel::titleActionRequested, this,
+        &MainWindow::onTitleAction);
     connect(impl_->inputsPanel, &InputPanel::removeRequested, this, &MainWindow::onInputRemove);
     connect(impl_->inputsPanel, &InputPanel::propertiesRequested, this,
         &MainWindow::onInputProperties);
@@ -685,6 +741,13 @@ void MainWindow::applyProject(core::Project project)
     impl_->transitionBar->setFtb(false);
     impl_->transitionBar->setAutoRunning(false);
     impl_->transitionBar->setPosition(0.0F);
+
+    impl_->previewOverlays = false;
+    if (impl_->previewOverlaysToggle) {
+        QSignalBlocker blocker(impl_->previewOverlaysToggle);
+        impl_->previewOverlaysToggle->setChecked(false);
+    }
+    refreshOverlayButtons();
 
     impl_->compositor->sync(impl_->inputService->inputs());
 
@@ -845,7 +908,12 @@ void MainWindow::tick()
 
     const auto& state = impl_->switcher->state();
     QImage programFrame = impl_->compositor->renderInput(all, state.programInputId);
-    const QImage previewFrame = impl_->compositor->renderInput(all, state.previewInputId);
+    QImage previewFrame = impl_->compositor->renderInput(all, state.previewInputId);
+
+    const bool hasOverlay = std::any_of(impl_->project.overlays.begin(),
+        impl_->project.overlays.end(), [](const auto& overlay) {
+            return overlay.enabled && !overlay.inputId.empty();
+        });
 
     if (impl_->autoRunning) {
         const float progress = static_cast<float>(impl_->autoClock.elapsed())
@@ -871,10 +939,22 @@ void MainWindow::tick()
     }
     impl_->program->setTransition(impl_->position);
 
+    // Downstream overlays sit above the transition but below fade-to-black,
+    // matching the vMix / SinSam bus order.
+    if (hasOverlay) {
+        programFrame = impl_->compositor->applyOverlays(programFrame, all,
+            impl_->project.overlays);
+        if (impl_->previewOverlays) {
+            previewFrame = impl_->compositor->applyOverlays(previewFrame, all,
+                impl_->project.overlays);
+        }
+    }
+
     if (impl_->ftb) {
         programFrame = impl_->compositor->fadeToBlack(programFrame, 1.0F);
     }
 
+    impl_->lastProgramFrame = programFrame;
     impl_->program->setFrame(programFrame);
     impl_->preview->setFrame(previewFrame);
     impl_->recorder->submit(programFrame);
@@ -932,6 +1012,256 @@ void MainWindow::onTbarReleased()
 void MainWindow::onFtbToggled(bool engaged)
 {
     impl_->ftb = engaged;
+}
+
+void MainWindow::onOverlayToggled(int layer)
+{
+    core::OverlayLayer* overlay = nullptr;
+    for (auto& candidate : impl_->project.overlays) {
+        if (candidate.layer == layer) {
+            overlay = &candidate;
+            break;
+        }
+    }
+    if (overlay && overlay->enabled) {
+        setOverlay(layer, overlay->inputId, false);
+        return;
+    }
+    if (overlay && !overlay->inputId.empty()) {
+        setOverlay(layer, overlay->inputId, true);
+        return;
+    }
+
+    const std::string selected = impl_->inputsPanel->selectedId();
+    if (!selected.empty()) {
+        setOverlay(layer, selected, true);
+        return;
+    }
+    if (auto* button = impl_->overlayButtons[layer - 1]) {
+        showOverlayMenu(layer, button->mapToGlobal(button->rect().center()));
+    }
+}
+
+void MainWindow::showOverlayMenu(int layer, const QPoint& globalPos)
+{
+    QMenu menu(this);
+    QAction* none = menu.addAction(tr("None (clear layer)"));
+    menu.addSeparator();
+
+    std::string assigned;
+    for (const auto& overlay : impl_->project.overlays) {
+        if (overlay.layer == layer) {
+            assigned = overlay.inputId;
+        }
+    }
+
+    std::vector<std::pair<QAction*, std::string>> entries;
+    for (const auto& input : impl_->inputService->inputs()) {
+        QAction* action = menu.addAction(QString::fromStdString(input.name));
+        action->setCheckable(true);
+        action->setChecked(input.id == assigned);
+        entries.emplace_back(action, input.id);
+    }
+
+    QAction* chosen = menu.exec(globalPos);
+    if (!chosen) {
+        return;
+    }
+    if (chosen == none) {
+        setOverlay(layer, {}, false);
+        return;
+    }
+    for (const auto& [action, inputId] : entries) {
+        if (action == chosen) {
+            setOverlay(layer, inputId, true);
+            return;
+        }
+    }
+}
+
+void MainWindow::setOverlay(int layer, const std::string& inputId, bool enabled)
+{
+    if (layer < 1 || layer > 4) {
+        return;
+    }
+    for (int index = 1; index <= 4; ++index) {
+        const bool exists = std::any_of(impl_->project.overlays.begin(),
+            impl_->project.overlays.end(),
+            [index](const auto& overlay) { return overlay.layer == index; });
+        if (!exists) {
+            core::OverlayLayer overlay;
+            overlay.layer = index;
+            impl_->project.overlays.push_back(overlay);
+        }
+    }
+    for (auto& overlay : impl_->project.overlays) {
+        if (!inputId.empty() && overlay.layer != layer && overlay.inputId == inputId) {
+            overlay.inputId.clear();
+            overlay.enabled = false;
+        }
+        if (overlay.layer == layer) {
+            overlay.inputId = inputId;
+            overlay.enabled = enabled && !inputId.empty();
+        }
+    }
+    refreshOverlayButtons();
+    schedulePersist();
+}
+
+void MainWindow::refreshOverlayButtons()
+{
+    for (int layer = 1; layer <= 4; ++layer) {
+        QPushButton* button = impl_->overlayButtons[layer - 1];
+        if (!button) {
+            continue;
+        }
+        const core::OverlayLayer* overlay = nullptr;
+        for (const auto& candidate : impl_->project.overlays) {
+            if (candidate.layer == layer) {
+                overlay = &candidate;
+                break;
+            }
+        }
+        const bool enabled = overlay && overlay->enabled && !overlay->inputId.empty();
+        QSignalBlocker blocker(button);
+        button->setChecked(enabled);
+        if (overlay && !overlay->inputId.empty()) {
+            button->setToolTip(tr("Overlay %1 — %2 (%3)\nClick to toggle, right-click to choose an input")
+                    .arg(layer)
+                    .arg(nameOf(overlay->inputId))
+                    .arg(enabled ? tr("on") : tr("off")));
+        } else {
+            button->setToolTip(tr("Overlay %1 — unassigned\nClick to choose an input")
+                    .arg(layer));
+        }
+    }
+}
+
+void MainWindow::onOverlayAssigned(const QString& id, int layer)
+{
+    setOverlay(layer, id.toStdString(), true);
+    statusBar()->showMessage(tr("%1 assigned to overlay %2")
+            .arg(nameOf(id.toStdString()))
+            .arg(layer),
+        4000);
+}
+
+void MainWindow::onOverlayCleared(const QString& id)
+{
+    const std::string inputId = id.toStdString();
+    bool changed = false;
+    for (auto& overlay : impl_->project.overlays) {
+        if (overlay.inputId == inputId) {
+            overlay.inputId.clear();
+            overlay.enabled = false;
+            changed = true;
+        }
+    }
+    if (!changed) {
+        return;
+    }
+    refreshOverlayButtons();
+    schedulePersist();
+    statusBar()->showMessage(tr("%1 removed from overlays").arg(nameOf(inputId)), 4000);
+}
+
+void MainWindow::onTitleAction(const QString& id, const QString& action)
+{
+    const auto* input = impl_->inputService->find(id.toStdString());
+    if (!input || input->kind != core::InputKind::Title) {
+        return;
+    }
+    auto copy = *input;
+    const auto read = [&copy](const char* key) {
+        const auto it = copy.params.find(key);
+        return it == copy.params.end() ? QString() : QString::fromStdString(it->second);
+    };
+    const auto write = [&copy](const char* key, qint64 value) {
+        copy.params[key] = std::to_string(value);
+    };
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    bool changed = true;
+
+    if (action == "countdownStart") {
+        qint64 duration = read("countdownSeconds").toLongLong();
+        if (duration <= 0) {
+            duration = 300;
+        }
+        qint64 remaining = read("countdownRemaining").toLongLong();
+        if (read("countdownEnd").toLongLong() > now) {
+            changed = false;
+        } else {
+            if (remaining <= 0 || remaining > duration * 1000) {
+                remaining = duration * 1000;
+            }
+            write("countdownEnd", now + remaining);
+            write("countdownRemaining", remaining);
+            write("countdownPaused", 0);
+        }
+    } else if (action == "countdownPause") {
+        const qint64 end = read("countdownEnd").toLongLong();
+        if (end <= 0) {
+            changed = false;
+        } else {
+            const qint64 remaining = std::max<qint64>(0, end - now);
+            write("countdownEnd", 0);
+            write("countdownRemaining", remaining);
+            write("countdownPaused", 1);
+        }
+    } else if (action == "countdownReset") {
+        qint64 duration = read("countdownSeconds").toLongLong();
+        if (duration <= 0) {
+            duration = 300;
+        }
+        write("countdownEnd", 0);
+        write("countdownRemaining", duration * 1000);
+        write("countdownPaused", 0);
+    } else if (action == "homePlus" || action == "homeMinus" || action == "awayPlus"
+        || action == "awayMinus") {
+        const bool home = action.startsWith("home");
+        const bool plus = action.endsWith("Plus");
+        const char* key = home ? "scoreHome" : "scoreAway";
+        const int score = std::max(0, read(key).toInt() + (plus ? 1 : -1));
+        write(key, score);
+    } else {
+        changed = false;
+    }
+
+    if (!changed) {
+        return;
+    }
+    impl_->inputService->update(copy);
+    refreshPanels();
+    schedulePersist();
+}
+
+void MainWindow::onSnapshot()
+{
+    QImage frame = impl_->lastProgramFrame;
+    if (frame.isNull()) {
+        const auto all = impl_->inputService->inputs();
+        const auto& state = impl_->switcher->state();
+        frame = impl_->compositor->renderInput(all, state.programInputId);
+        frame = impl_->compositor->applyOverlays(frame, all, impl_->project.overlays);
+        if (impl_->ftb) {
+            frame = impl_->compositor->fadeToBlack(frame, 1.0F);
+        }
+    }
+    if (frame.isNull()) {
+        return;
+    }
+
+    const QString directory = outputDirectory();
+    QDir().mkpath(directory);
+    const QString file = QDir(directory).filePath(
+        QString("Mixvera_snapshot_%1.png")
+            .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
+    if (!frame.save(file, "PNG")) {
+        QMessageBox::warning(this, tr("Snapshot"),
+            tr("The snapshot could not be saved to %1.").arg(file));
+        return;
+    }
+    statusBar()->showMessage(tr("Snapshot saved: %1").arg(file), 6000);
 }
 
 void MainWindow::resetTransition()
@@ -1226,6 +1556,18 @@ void MainWindow::onInputRemove(const QString& id)
         if (copy.items.size() != before) {
             impl_->inputService->update(copy);
         }
+    }
+
+    bool overlayChanged = false;
+    for (auto& overlay : impl_->project.overlays) {
+        if (overlay.inputId == inputId) {
+            overlay.inputId.clear();
+            overlay.enabled = false;
+            overlayChanged = true;
+        }
+    }
+    if (overlayChanged) {
+        refreshOverlayButtons();
     }
 
     impl_->inputService->remove(inputId);

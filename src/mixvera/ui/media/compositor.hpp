@@ -33,6 +33,12 @@ public:
         const std::string& id) const;
     QImage mix(const QImage& from, const QImage& to, core::TransitionKind kind,
         float position) const;
+    /// Draws enabled overlay layers 1..4 on top of an already mixed frame.
+    /// Scene overlays are rendered with a transparent background so their
+    /// lower thirds and logos keep their alpha.
+    QImage applyOverlays(const QImage& base,
+        const std::vector<core::InputDescriptor>& inputs,
+        const std::vector<core::OverlayLayer>& overlays) const;
     QImage black() const;
     QImage fadeToBlack(const QImage& source, float amount) const;
 
@@ -47,9 +53,12 @@ private:
     };
 
     QImage sourceImage(const std::string& id) const;
+    QImage overlayImage(const core::InputDescriptor& input,
+        const std::vector<core::InputDescriptor>& inputs) const;
     void drawCover(QPainter& painter, const QImage& image, const QRectF& target) const;
     QImage renderScene(const core::InputDescriptor& scene,
-        const std::vector<core::InputDescriptor>& inputs) const;
+        const std::vector<core::InputDescriptor>& inputs,
+        bool opaqueBackground = true) const;
 
     QSize canvas_{1920, 1080};
     int frameRate_ = 30;

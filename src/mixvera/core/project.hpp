@@ -30,6 +30,9 @@ struct Project {
     TransitionKind transitionKind = TransitionKind::Fade;
     std::uint32_t transitionDurationMs = 500;
 
+    /// Always four entries after normalization, layer 1 first.
+    std::vector<OverlayLayer> overlays;
+
     ProjectOutputs outputs;
 };
 

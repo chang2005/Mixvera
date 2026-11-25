@@ -118,10 +118,19 @@ void AddInputDialog::buildUi()
 
     auto* titlePage = new QWidget(pages_);
     auto* titleForm = new QFormLayout(titlePage);
+    titleStyle_ = new QComboBox(titlePage);
+    titleStyle_->addItem(tr("Full Screen"), "full");
+    titleStyle_->addItem(tr("Lower Third"), "lower");
+    titleStyle_->addItem(tr("Countdown"), "countdown");
+    titleStyle_->addItem(tr("Scoreboard"), "scoreboard");
+    titleForm->addRow(tr("Style"), titleStyle_);
     text_ = new QPlainTextEdit(titlePage);
     text_->setPlaceholderText(tr("Title text, one line per row"));
     text_->setFixedHeight(84);
     titleForm->addRow(tr("Text"), text_);
+    subtitle_ = new QLineEdit(titlePage);
+    subtitle_->setPlaceholderText(tr("Optional second line for lower thirds"));
+    titleForm->addRow(tr("Subtitle"), subtitle_);
     textSize_ = new QSpinBox(titlePage);
     textSize_->setRange(12, 200);
     textSize_->setValue(64);
@@ -133,7 +142,37 @@ void AddInputDialog::buildUi()
     align_->setCurrentIndex(1);
     titleForm->addRow(tr("Align"), align_);
     colour_ = new QPushButton(tr("Choose Colour…"), titlePage);
-    titleForm->addRow(tr("Colour"), colour_);
+    titleForm->addRow(tr("Accent Colour"), colour_);
+    countdownSeconds_ = new QSpinBox(titlePage);
+    countdownSeconds_->setRange(1, 86400);
+    countdownSeconds_->setValue(300);
+    countdownSeconds_->setSuffix(" s");
+    titleForm->addRow(tr("Countdown Length"), countdownSeconds_);
+    competition_ = new QLineEdit(titlePage);
+    competition_->setPlaceholderText(tr("Competition or round"));
+    titleForm->addRow(tr("Competition"), competition_);
+    auto* homeRow = new QWidget(titlePage);
+    auto* homeLayout = new QHBoxLayout(homeRow);
+    homeLayout->setContentsMargins(0, 0, 0, 0);
+    homeLayout->setSpacing(6);
+    homeName_ = new QLineEdit(homeRow);
+    homeName_->setPlaceholderText(tr("Home team"));
+    homeScore_ = new QSpinBox(homeRow);
+    homeScore_->setRange(0, 999);
+    homeLayout->addWidget(homeName_, 1);
+    homeLayout->addWidget(homeScore_);
+    titleForm->addRow(tr("Home Team"), homeRow);
+    auto* awayRow = new QWidget(titlePage);
+    auto* awayLayout = new QHBoxLayout(awayRow);
+    awayLayout->setContentsMargins(0, 0, 0, 0);
+    awayLayout->setSpacing(6);
+    awayName_ = new QLineEdit(awayRow);
+    awayName_->setPlaceholderText(tr("Away team"));
+    awayScore_ = new QSpinBox(awayRow);
+    awayScore_->setRange(0, 999);
+    awayLayout->addWidget(awayName_, 1);
+    awayLayout->addWidget(awayScore_);
+    titleForm->addRow(tr("Away Team"), awayRow);
     pages_->addWidget(titlePage);
 
     auto* colourPage = new QWidget(pages_);
@@ -259,6 +298,7 @@ void AddInputDialog::pickColour()
 void AddInputDialog::loadFrom(const core::InputDescriptor& input)
 {
     id_ = QString::fromStdString(input.id);
+    baseParams_ = input.params;
     setWindowTitle(tr("Input Properties"));
 
     const int index = type_->findData(static_cast<int>(input.kind));
@@ -294,12 +334,22 @@ void AddInputDialog::loadFrom(const core::InputDescriptor& input)
         || input.kind == core::InputKind::MediaFile) {
         file_->setText(value("file"));
     } else if (input.kind == core::InputKind::Title) {
+        const int styleIndex = titleStyle_->findData(value("style"));
+        titleStyle_->setCurrentIndex(styleIndex < 0 ? 0 : styleIndex);
         text_->setPlainText(value("text"));
+        subtitle_->setText(value("subtitle"));
         textSize_->setValue(value("size").toInt());
         const int alignIndex = align_->findData(value("align"));
         align_->setCurrentIndex(alignIndex < 0 ? 1 : alignIndex);
         colourValue_ = QColor(value("color"));
         colour_->setText(colourValue_.name().toUpper());
+        const int countdown = value("countdownSeconds").toInt();
+        countdownSeconds_->setValue(countdown > 0 ? countdown : 300);
+        competition_->setText(value("competition"));
+        homeName_->setText(value("homeName"));
+        awayName_->setText(value("awayName"));
+        homeScore_->setValue(value("scoreHome").toInt());
+        awayScore_->setValue(value("scoreAway").toInt());
     } else if (input.kind == core::InputKind::Color) {
         colourValue_ = QColor(value("color"));
         setStyleSheet(QString());
@@ -318,6 +368,10 @@ core::InputDescriptor AddInputDialog::descriptor() const
     input.id = id_.toStdString();
     input.name = name_->text().trimmed().toStdString();
     input.kind = static_cast<core::InputKind>(type_->currentData().toInt());
+    // Keep runtime parameters the dialog does not edit (countdown end time,
+    // remaining time and pause state) so opening properties never restarts a
+    // live countdown.
+    input.params = baseParams_;
 
     switch (input.kind) {
     case core::InputKind::ScreenCapture:
@@ -336,9 +390,17 @@ core::InputDescriptor AddInputDialog::descriptor() const
         break;
     case core::InputKind::Title:
         input.params["text"] = text_->toPlainText().toStdString();
+        input.params["style"] = titleStyle_->currentData().toString().toStdString();
+        input.params["subtitle"] = subtitle_->text().trimmed().toStdString();
         input.params["size"] = std::to_string(textSize_->value());
         input.params["align"] = align_->currentData().toString().toStdString();
         input.params["color"] = colourValue_.name().toStdString();
+        input.params["countdownSeconds"] = std::to_string(countdownSeconds_->value());
+        input.params["competition"] = competition_->text().trimmed().toStdString();
+        input.params["homeName"] = homeName_->text().trimmed().toStdString();
+        input.params["awayName"] = awayName_->text().trimmed().toStdString();
+        input.params["scoreHome"] = std::to_string(homeScore_->value());
+        input.params["scoreAway"] = std::to_string(awayScore_->value());
         break;
     case core::InputKind::Color:
         input.params["color"] = colourValue_.name().toStdString();

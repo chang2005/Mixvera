@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.5.0] — 2026-11-25
+
+把对 SinSam（芯象）26.7.10.3 安装包的只读逆向结果落地：四路下游叠加层、Fly / Cube 转场、标题预置（下三分之一 / 倒计时 / 比分牌）与快照。取证记录见 `docs/RE-SINSAM.md`。
+
+### 新增
+
+- **四路下游叠加层（Overlay 1–4）**：总线顺序与 vMix / SinSam 一致——转场之后、FTB 之前；每层可指定任意输入（含场景），场景以透明背景渲染；页脚 `OVERLAY 1–4` 按钮点击开关、右键换输入；输入条右键「叠加层」子菜单；一个输入同时只占一层；删除输入自动清层；随工程 JSON 保存与恢复
+- **预览叠加**：页脚 `PVW OVL` 复选框，预览监视器可显示叠加结果
+- **Fly / Cube 转场**：转场栏扩展为 2×3 六种；飞入为双卡片缩放旋转飞行，立方体为带明暗渐变的水平立方旋转
+- **标题四种样式**：全屏（原有）、下三分之一（主标题 + 副标题 + 强调色条）、倒计时（大号 `MM:SS` + 进度条 + 归零变红）、比分牌（赛事名 + 主客队比分）；`AddInputDialog` 标题页新增样式、副标题、倒计时长度、赛事、队名与比分字段
+- **标题实时控制**：输入条右键「标题控制」——倒计时开始 / 暂停 / 重置（真实时钟，`countdownEnd` 时间戳随工程保存）、主客队得分 ±1
+- **快照**：页脚按钮、输出菜单与 `Ctrl+Shift+P`，把当前节目输出（含叠加与 FTB）保存为时间戳 PNG 到录制目录
+- **逆向报告**：`docs/RE-SINSAM.md`——安装包 / 程序集 / 资源 / MCP 工具目录 / 标题模板的 SHA-256、功能地图、0.5 取舍与复现命令
+- 文档：`README.md`、`docs/DESIGN.md`（0.5 增量表）、`docs/UI-SPEC.md`（SinSam 对照表）、`docs/RE-SINSAM.md` 更新；新增截图 `docs/demo/mixvera-0.5-*.png`
+
+### 变更
+
+- `TransitionKind` 增加 `Fly` / `Cube`，JSON 键 `fly` / `cube` 往返
+- `Project` 增加恒为四条的 `overlays` 数组；加载时清理已不存在的输入引用
+- `Compositor::renderScene` 支持透明背景，供叠加层复用
+- 标题输入的运行参数（倒计时 end/remaining/paused）在属性对话框中保留不被覆盖
+- 翻译规模 305 → 351 条，新增叠加层、标题样式与快照文案，全部完成
+- 版本号升至 0.5.0；窗口标题与关于对话框更新
+- QSS 新增 `overlayButton` / `footerCheck` 样式（三主题 token 驱动）
+
+### 测试
+
+- `mixvera_project_tests`：Fly / Cube 键往返、叠加层 JSON 往返与失效输入清理
+- `mixvera_media_tests`：四种标题样式出帧且非空、倒计时 / 比分 `detail()`、叠加层像素合成（开 / 关）、Fly / Cube 转场渲染
+- `mixvera_ui_smoke_tests`：叠加层按钮选输入后点亮、快照按钮写 PNG
+- 四个测试目标全部通过（core / project / ui smoke / media）
+
 ## [0.4.0] — 2026-11-25
 
 主题、调音台与设置界面的完整设计；采集、合成、切换与输出沿用 0.3。
